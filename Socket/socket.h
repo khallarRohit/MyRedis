@@ -1,0 +1,10 @@
+
+
+namespace MyRedis{
+
+    class Socket{
+        
+
+    };
+
+}
