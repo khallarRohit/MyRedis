@@ -2,9 +2,10 @@
 
 namespace MyRedis{
 
-    enum Error{
+    enum class Error{
         InvalidIPv4,
-        InvalidIPv6
+        InvalidIPv6,
+        UninitializedSocket,
     };
 
 }

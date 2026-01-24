@@ -13,13 +13,13 @@ namespace MyRedis{
     public:
         IPEndpoint(sockaddr* addr);
         IPEndpoint(const char* ip, const unsigned short port);
-        sockaddr_in getSockaddrIPv4();
-        sockaddr_in6 getSockaddrIPv6();
-        IPVersion getIPVersion();
-        std::string getIP();
-        unsigned short getPort();
-        std::string getNumericHost();
-        uint8_t* getIPBytes();
+        sockaddr_in getSockaddrIPv4() const;
+        sockaddr_in6 getSockaddrIPv6() const;
+        IPVersion getIPVersion() const;
+        std::string getIP() const;
+        unsigned short getPort() const;
+        std::string getNumericHost() const;
+        uint8_t* getIPBytes() const;
 
     private:
         IPVersion ipversion{};

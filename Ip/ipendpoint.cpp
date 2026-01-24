@@ -116,7 +116,7 @@ namespace MyRedis{
         hostname = ipS;
     }
 
-    sockaddr_in IPEndpoint::getSockaddrIPv4(){
+    sockaddr_in IPEndpoint::getSockaddrIPv4() const{
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htonl(port);
@@ -124,7 +124,7 @@ namespace MyRedis{
         return addr;
     }
 
-    sockaddr_in6 IPEndpoint::getSockaddrIPv6(){
+    sockaddr_in6 IPEndpoint::getSockaddrIPv6() const{
         sockaddr_in6 addr{};
         addr.sin6_family = AF_INET6;
         addr.sin6_port = htonl(port);
@@ -132,23 +132,25 @@ namespace MyRedis{
         return addr;
     }
 
-    IPVersion IPEndpoint::getIPVersion(){
+    IPVersion IPEndpoint::getIPVersion() const{
         return ipversion;
     }
 
-    std::string IPEndpoint::getIP(){
+    std::string IPEndpoint::getIP() const{
         return ipS;
     }
 
-    uint8_t* IPEndpoint::getIPBytes(){
-        return ipBytes;
+    uint8_t* IPEndpoint::getIPBytes() const{
+        uint8_t tempipBytes[16]{};
+        memcpy(&tempipBytes[0], &ipBytes[0], sizeof(ULONG));
+        return tempipBytes;
     }
 
-    std::string IPEndpoint::getNumericHost(){
+    std::string IPEndpoint::getNumericHost() const{
         return hostname;
     }
 
-    unsigned short IPEndpoint::getPort(){
+    unsigned short IPEndpoint::getPort() const{
         return port;
     }
 
