@@ -10,6 +10,9 @@ add_executable(MyRedisServer
     Error/error.cpp
     Ip/ipendpoint.cpp
     Socket/socket.cpp
+    TCPConnection/tcpconnection.cpp 
+    Server/server.cpp
+    Network/network.cpp 
 )
 
 # ==========================================

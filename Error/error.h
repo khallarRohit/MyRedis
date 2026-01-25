@@ -1,4 +1,6 @@
 #pragma once
+#include <iostream>
+#include <string>
 
 namespace MyRedis{
 
@@ -7,5 +9,7 @@ namespace MyRedis{
         InvalidIPv6,
         UninitializedSocket,
     };
-
 }
+
+
+

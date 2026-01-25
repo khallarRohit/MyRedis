@@ -48,6 +48,8 @@ typedef struct sockaddr_in {
 
 namespace MyRedis{
 
+    IPEndpoint::IPEndpoint(){}
+
     IPEndpoint::IPEndpoint(const char* ip, unsigned short port){
         this->port = port;
         addrinfo hints{};

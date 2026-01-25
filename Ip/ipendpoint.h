@@ -11,6 +11,7 @@ namespace MyRedis{
 
     class IPEndpoint {
     public:
+        IPEndpoint();
         IPEndpoint(sockaddr* addr);
         IPEndpoint(const char* ip, const unsigned short port);
         sockaddr_in getSockaddrIPv4() const;

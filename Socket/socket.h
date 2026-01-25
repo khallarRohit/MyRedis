@@ -13,15 +13,18 @@ namespace MyRedis{
 
     class Socket{
         public:
+            Socket();
             Socket(const IPEndpoint& ipendpoint);
             Socket(const IPEndpoint& ipendpoint, const SOCKET& skt);
             void _close();
-            void _bind();
-            void _listen(const int backlog);
-            void _accept(SOCKET& skt, IPEndpoint& ipendpoint);
-
+            void _listen();
+            void _accept(Socket& handle);
+            SOCKET getSocket();
+            IPVersion getIPVersion();
+            void printSocketInfo();
 
         private:
+            void _bind();
             void setSocketOptions(const SocketOption& option, BOOL value);
             void setBlocking(const bool isBlocking);
             IPEndpoint ipendpoint;

@@ -1,100 +1,102 @@
 #include "socket.h"
 
 /*
-SOCKET WSAAPI socket(
-  [in] int af,
-  [in] int type,
-  [in] int protocol
-);
+    SOCKET WSAAPI socket(
+        [in] int af,
+        [in] int type,
+        [in] int protocol
+    );
 
-af => family specification
-type => connection type
-protocol => connection protocol
-
-*/
-
-/*
-ioctlsocket() => control I/O mode of a socket
-int WSAAPI ioctlsocket(
-  [in]      SOCKET s,
-  [in]      long   cmd,
-  [in, out] u_long *argp
-);
-
-s => socket descriptor
-cmd => command to perform on socket
-argp => pointer to parameter of cmd
-
-success => 0
-*/
-
-/*
-setsockopt() => to set a socket options
-
-int WSAAPI setsockopt(
-  [in] SOCKET     s,
-  [in] int        level,
-  [in] int        optname,
-  [in] const char *optval,
-  [in] int        optlen
-);
-
-s => descriptor
-if no error => returns zero
-if error => value of SOCKET_ERROR is returned
+    af => family specification
+    type => connection type
+    protocol => connection protocol
 
 */
 
 /*
-int WSAAPI closesocket(
-  [in] SOCKET s
-);
-error => SOCKET_ERROR is returned
+    ioctlsocket() => control I/O mode of a socket
+    int WSAAPI ioctlsocket(
+        [in]      SOCKET s,
+        [in]      long   cmd,
+        [in, out] u_long *argp
+    );
+
+    s => socket descriptor
+    cmd => command to perform on socket
+    argp => pointer to parameter of cmd
+
+    success => 0
 */
 
 /*
-bind() => associate a local address with a socket
+    setsockopt() => to set a socket options
 
-int WSAAPI bind(
-  [in] SOCKET         s,
-  [in] const sockaddr *name,
-  [in] int            namelen
-);
+    int WSAAPI setsockopt(
+        [in] SOCKET     s,
+        [in] int        level,
+        [in] int        optname,
+        [in] const char *optval,
+        [in] int        optlen
+    );
 
-*/
-
-/*
-listen() => places socket in a state in which it is listening for incomming connections
-
-int WSAAPI listen(
-  [in] SOCKET s,
-  [in] int    backlog
-);
-
-s => unconnected descriptor
-backlog => The maximum length of the queue of pending connections.after which starts to reject connections 
+    s => descriptor
+    if no error => returns zero
+    if error => value of SOCKET_ERROR is returned
 
 */
 
 /*
-accept() => permit incomming connection attempt on a socket
+    int WSAAPI closesocket(
+        [in] SOCKET s
+    );
+    error => SOCKET_ERROR is returned
+*/
 
-SOCKET WSAAPI accept(
-  [in]      SOCKET   s,
-  [out]     sockaddr *addr,
-  [in, out] int      *addrlen
-);
+/*
+    bind() => associate a local address with a socket
 
-s => socket descriptor on which a attempt to connection is done
-addr => An optional pointer to a buffer that receives the address of the connecting entity, as known to the communications layer. 
-addrlen => An optional pointer to an integer that contains the length of structure pointed to by the addr parameter.
+    int WSAAPI bind(
+        [in] SOCKET         s,
+        [in] const sockaddr *name,
+        [in] int            namelen
+    );
 
-If no error occurs, accept returns a value of type SOCKET that is a descriptor for the new socket.
-Otherwise, a value of INVALID_SOCKET is returned, and a specific error code can be retrieved by calling WSAGetLastError.
+*/
+
+/*
+    listen() => places socket in a state in which it is listening for incomming connections
+
+    int WSAAPI listen(
+        [in] SOCKET s,
+        [in] int    backlog
+    );
+
+    s => unconnected descriptor
+    backlog => The maximum length of the queue of pending connections.after which starts to reject connections 
+
+*/
+
+/*
+    accept() => permit incomming connection attempt on a socket
+
+    SOCKET WSAAPI accept(
+        [in]      SOCKET   s,
+        [out]     sockaddr *addr,
+        [in, out] int      *addrlen
+    );
+
+    s => socket descriptor on which a attempt to connection is done
+    addr => An optional pointer to a buffer that receives the address of the connecting entity, as known to the communications layer. 
+    addrlen => An optional pointer to an integer that contains the length of structure pointed to by the addr parameter.
+
+    If no error occurs, accept returns a value of type SOCKET that is a descriptor for the new socket.
+    Otherwise, a value of INVALID_SOCKET is returned, and a specific error code can be retrieved by calling WSAGetLastError.
 
 */
 
 namespace MyRedis{
+
+    Socket::Socket(){};
 
     Socket::Socket(const IPEndpoint& ipendpoint)
     :ipendpoint(ipendpoint){
@@ -171,41 +173,71 @@ namespace MyRedis{
         }
     }
 
-    void Socket::_listen(const int backlog){
+    void Socket::_listen(){
         _bind(); // tries to bind the socket to ipendpoint
-        int res = listen(skt, backlog);
+        int res = listen(skt, SOMAXCONN);
 
         if(res == SOCKET_ERROR){
             throw WSAGetLastError();
         }
     }
 
-    void Socket::_accept(SOCKET& skt, IPEndpoint& ipendpoint){
+    void Socket::_accept(Socket& handle){
         const IPVersion version = this->ipendpoint.getIPVersion();
         
+        IPEndpoint outipendpoint{};
+        SOCKET outskt = INVALID_SOCKET;
         if(version == IPVersion::IPv4){
             sockaddr_in addr{};
             int len = sizeof(sockaddr_in);
-            skt = accept(this->skt, (sockaddr*)&addr, &len);
+            outskt = accept(this->skt, (sockaddr*)&addr, &len);
 
-            if(skt == INVALID_SOCKET){
+            if(outskt == INVALID_SOCKET){
                 throw WSAGetLastError();
             }            
 
-            ipendpoint = IPEndpoint((sockaddr*)&addr);
+            outipendpoint = IPEndpoint((sockaddr*)&addr);
         }else{
             sockaddr_in6 addr{};
             int len = sizeof(sockaddr_in6);
-            skt = accept(this->skt, (sockaddr*)&addr, &len);
+            outskt = accept(this->skt, (sockaddr*)&addr, &len);
 
-            if(skt == INVALID_SOCKET){
+            if(outskt == INVALID_SOCKET){
                 throw WSAGetLastError();
             }
 
-            ipendpoint = IPEndpoint((sockaddr*)&addr);
+            outipendpoint = IPEndpoint((sockaddr*)&addr);
         }
+        handle = Socket(outipendpoint, outskt);
+    }
+
+    SOCKET Socket::getSocket(){
+        return skt;
     }
   
+    IPVersion Socket::getIPVersion(){
+        return ipendpoint.getIPVersion();
+    }
+
+    void Socket::printSocketInfo(){
+        const IPVersion version = ipendpoint.getIPVersion();
+        const std::string ip_string = ipendpoint.getIP();
+        const unsigned short port = ipendpoint.getPort();
+
+        {
+            std::cout << std::endl;
+            if(version == IPVersion::IPv4){
+                std::cout << "[Client-IP-VERSION] IPv4" << std::endl;
+            }else{
+                std::cout << "[Client-IP-VERSION] IPv6" << std::endl;
+            }
+
+            std::cout << "[Client-IP] " << ip_string << std::endl;
+            std::cout << "[Client-PORT] " << port << std::endl;
+            std::cout << std::endl;
+        }
+
+    }
 }
 
 
