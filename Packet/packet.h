@@ -1,23 +1,26 @@
 #pragma once
 #include "packettask.h"
+#include "packetquery.h"
 #include "packetexception.h"
 #include <vector>
 #include <cstdint>
-
 
 namespace MyRedis{
 
     class Packet{
     public:
-        Packet(std::size_t maxPacketSize = 1000);
-        void append(const void* data, uint32_t size);
+        Packet();
+        void resolveTask(uint32_t bytesReceived);
         void clear();
-        void changeState(BufferState state);
+        PacketTask getTask();
         BufferState getState();
     private:
-        std::vector<char> buffer;
+        void cleanBuffer();
+        void cleanTask();
         BufferState state{BufferState::NOTFULL};
-        std::size_t maxPacketSize{};
+        PacketTask packetTask{PacketTask::DSTYPE};
+        PacketQuery packetQuery{};
+        uint32_t extractionOffset{};
     };
 
 

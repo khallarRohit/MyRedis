@@ -48,7 +48,19 @@ typedef struct sockaddr_in {
 
 namespace MyRedis{
 
-    IPEndpoint::IPEndpoint(){}
+    IPEndpoint::IPEndpoint(const IPVersion& ipversion)
+    :ipversion(ipversion){}
+
+    IPEndpoint::IPEndpoint(const IPEndpoint& ipendpoint){
+        this->hostname = ipendpoint.hostname;
+        for(int i=0;i<16;i++){
+            this->ipBytes[i] = ipendpoint.ipBytes[i];
+        }
+        this->ipS = ipendpoint.ipS;
+        this->ipversion = ipendpoint.ipversion;
+        this->port = ipendpoint.port;
+        this->isBound = true;
+    }
 
     IPEndpoint::IPEndpoint(const char* ip, unsigned short port){
         this->port = port;
@@ -62,7 +74,7 @@ namespace MyRedis{
         int res = getaddrinfo(ip, NULL, &hints, &resultInfo);
         
         if(res != 0){
-            throw WSAGetLastError();
+            throwWSAError("IP/ipendpoint.cpp line:75");
         }
 
         addrinfo* ptr = nullptr;
@@ -87,7 +99,6 @@ namespace MyRedis{
             inet_ntop(AF_INET, &v4->sin_addr, &ipS[0], 16);            
         }else{
             sockaddr_in6* v6 = reinterpret_cast<sockaddr_in6*>(ptr->ai_addr);
-
             ipversion = IPVersion::IPv6;
             memcpy(&ipBytes[0], &v6->sin6_addr, 16);
 
@@ -97,6 +108,7 @@ namespace MyRedis{
 
         hostname = ip;
         freeaddrinfo(resultInfo);
+        this->isBound  = true;
     }
 
     IPEndpoint::IPEndpoint(sockaddr* addr){
@@ -116,22 +128,45 @@ namespace MyRedis{
             inet_ntop(AF_INET6, &addrv6->sin6_addr, &ipS[0], 46);
         }
         hostname = ipS;
+        this->isBound = true;
+    }
+
+    IPEndpoint& IPEndpoint::operator=(const IPEndpoint& ipendpoint){
+        this->hostname = ipendpoint.hostname;
+        for(int i=0;i<16;i++){
+            this->ipBytes[i] = ipendpoint.ipBytes[i];
+        }
+        this->ipS = ipendpoint.ipS;
+        this->ipversion = ipendpoint.ipversion;
+        this->port = ipendpoint.port;
+        this->isBound = true;
+        return *this;
     }
 
     sockaddr_in IPEndpoint::getSockaddrIPv4() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:148");
+        }
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
-        addr.sin_port = htonl(port);
+        addr.sin_port = htons(port);
         memcpy(&addr.sin_addr, &ipBytes[0], sizeof(ULONG));
         return addr;
     }
 
     sockaddr_in6 IPEndpoint::getSockaddrIPv6() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:159");
+        }
         sockaddr_in6 addr{};
         addr.sin6_family = AF_INET6;
-        addr.sin6_port = htonl(port);
-        memcpy(&addr.sin6_addr, &ipBytes[0], sizeof(ULONG));
+        addr.sin6_port = htons(port);
+        memcpy(&addr.sin6_addr, &ipBytes[0], 16);
         return addr;
+    }
+
+    const bool IPEndpoint::getBound(){
+        return isBound;
     }
 
     IPVersion IPEndpoint::getIPVersion() const{
@@ -139,20 +174,30 @@ namespace MyRedis{
     }
 
     std::string IPEndpoint::getIP() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:178");
+        }
         return ipS;
     }
 
-    uint8_t* IPEndpoint::getIPBytes() const{
-        uint8_t tempipBytes[16]{};
-        memcpy(&tempipBytes[0], &ipBytes[0], sizeof(ULONG));
-        return tempipBytes;
+    std::array<uint8_t, 16> IPEndpoint::getIPBytes() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:185");
+        }
+        return ipBytes;
     }
 
     std::string IPEndpoint::getNumericHost() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:192");
+        }
         return hostname;
     }
 
     unsigned short IPEndpoint::getPort() const{
+        if(!this->isBound){
+            throw std::system_error(MyRedis::Error::SocketNotBound, "Ip/Ipendpoint.cpp line:199");
+        }
         return port;
     }
 

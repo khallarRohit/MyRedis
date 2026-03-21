@@ -17,8 +17,8 @@ namespace MyRedis{
         static ThreadPool* poolInstance;
         int noOfThreads;
         std::shared_ptr<SharedLock> ctx;      
-        ProcessQueue* instance;
-        std::vector<std::thread>processThread;
+        std::shared_ptr<ProcessQueue> packetQueue;
+        std::vector<std::thread> processThread;
         std::function<void()> getPacket{
             [this](){
                 while(true){

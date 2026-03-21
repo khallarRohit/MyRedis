@@ -2,7 +2,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <WinSock2.h>
 #include <utility>
+#include <iostream>
 #include "IP/ipendpoint.h"
+#include "Error/WSAexception.h"
 
 namespace MyRedis{
 
@@ -13,22 +15,39 @@ namespace MyRedis{
 
     class Socket{
         public:
-            Socket();
-            Socket(const IPEndpoint& ipendpoint);
-            Socket(const IPEndpoint& ipendpoint, const SOCKET& skt);
+            Socket(); // constructor initializes to default values
+
+            // copy constructor
+            Socket(const Socket& handle); // shallow copy
+            // Socket(Socket&& handle) noexcept;  // move   
+
+            // create a new instance of socket using the parameters passed
+            Socket(const IPEndpoint& ipendpoint, SOCKET& skt); 
+            Socket(const IPEndpoint& ipendpoint); 
+            Socket(const IPVersion& ipversion);
+            
+            // = operator overload
+            Socket& operator=(const Socket& handle); // shallow copy
+            // Socket& operator=(Socket&& handle) noexcept;  // move
+
+
             void _close();
             void _listen();
-            void _accept(Socket& handle);
+            void _connect(const IPEndpoint& ipendpoint);
+            const bool _accept(Socket& handle);
+            const bool checkBound();
             SOCKET getSocket();
             IPVersion getIPVersion();
             void printSocketInfo();
+            ~Socket();
 
         private:
             void _bind();
             void setSocketOptions(const SocketOption& option, BOOL value);
             void setBlocking(const bool isBlocking);
-            IPEndpoint ipendpoint;
+            IPEndpoint ipendpoint{IPVersion::unknown};
             SOCKET skt = INVALID_SOCKET;
+            bool isBound = false;
     };
 
 }

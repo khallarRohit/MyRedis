@@ -11,16 +11,19 @@
 
 namespace MyRedis{
 
-    bool Network::initialize(){
+    void Network::initialize(){
         WSAData wsadata;
         int res = WSAStartup(MAKEWORD(2, 2), &wsadata);
         if(res != 0){
-            throw WSAGetLastError();
+            throwWSAError("Network/network.cpp line:18");
         }
     }
 
     void Network::shutdown(){
-        WSACleanup();
+        int res = WSACleanup();
+        if(res == SOCKET_ERROR){
+            throwWSAError("Network/network.cpp line:25");
+        }
     }
 
 }

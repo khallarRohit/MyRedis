@@ -1,15 +1,22 @@
 #pragma once
-#include "socket.h"
+#include "Socket/socket.h"
+// #include "Packet/packetmanager.h"
+#include <memory>
+#include <memory>
+#include "SharedContext/sharedlock.h"
 
 namespace MyRedis{
     class TCPConnection{
     public:
-        TCPConnection(Socket& handle);   
-        void _close();  
+        
+        // copies parameter socket into it's own.
+        TCPConnection(const Socket& socket, std::shared_ptr<SharedLock> ctx);
+
+        // create a socket of it's own
+        TCPConnection(std::shared_ptr<SharedLock> ctx); 
+
         void printClientInfo();        
-        Socket& handle;
-        
-    private:
-        
+        std::unique_ptr<Socket> socket;
+        // PacketManager incommingPm;        
     };
 }

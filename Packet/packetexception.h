@@ -5,7 +5,7 @@ namespace MyRedis{
 
     class PacketException{
     public:
-        PacketException(std::string exception)
+        PacketException(const std::string& exception)
         :exception(exception){}
     
         std::string message(){

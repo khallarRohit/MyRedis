@@ -40,19 +40,39 @@
 
 */
 
+
+/*
+    The recv function receives data from a connected socket or a bound connectionless socket.
+
+    int WSAAPI recv(
+        [in]  SOCKET s,
+        [out] char   *buf,
+        [in]  int    len,
+        [in]  int    flags
+    );
+
+    s => socket descriptor that identifies a connected socket
+    buf => pointer to buffer to receive incomming data
+    len => The length, in bytes, of the buffer pointed to by the buf parameter.
+    flags => A set of flags that influences the behavior of this function.
+
+    If no error occurs, recv returns the number of bytes received and the buffer pointed to by the buf parameter will contain this data received.
+
+    in case of error a value of SOCKET_ERROR is returned
+*/
+
 namespace MyRedis{
+
     
     Server::Server(const IPEndpoint&& ipendpoint)
     :listeningSocket(ipendpoint){
+        ctx = std::make_shared<SharedLock>();
         std::cout << "Listening Socket created successfully" << std::endl;
-    };
+    }
 
     void Server::initialize(){
         fdList.clear();
-        connections.clear();
-
-        Network::initialize(); // tries to initialize the network
-        std::cout << "Winsock api Network initialized successfully." << std::endl;        
+        connections.clear();      
 
         listeningSocket._listen(); // tries to bind socket to endpoint + listen on the endpoint
         std::cout << "Socket is listening" << std::endl;
@@ -65,71 +85,119 @@ namespace MyRedis{
         fdList.push_back(listeningSocketfd);
     }
 
-    void Server::frame(){
+    void Server::frame(int& failCount, bool& listeningSocketFailed){
         std::vector<WSAPOLLFD> tempfdList = fdList;
 
-        int res = WSAPoll(tempfdList.data(), tempfdList.size(), -11);
+        int res = WSAPoll(tempfdList.data(), tempfdList.size(), 1000);
         if(res == 0) { // no sockets were in the queried state before the timer expired.
             return;
         }else if(res == SOCKET_ERROR){ // error occured
-            throw WSAGetLastError();
+            if(WSAGetLastError() == WSAENOBUFS){
+                failCount--;
+                std::cerr << "[!] Warning: System running out of buffers." << std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                return;
+            }
+
+            failCount = pollFailCount;
+            throwWSAError("Server/server.cpp line:102");
         }
 
-        WSAPOLLFD& listeningfd = tempfdList[0];
-        if(listeningfd.revents & POLLRDNORM){ // enter only if some request has come to listening socket
+        WSAPOLLFD& listeningSocketfd = tempfdList[0];
+
+        if(listeningSocketfd.revents & POLLNVAL){
+            listeningSocketFailed = true;
+            std::cerr << "[!] Error: Invalid ListeningSocket." << std::endl; 
+            return;
+        }
+        
+        if(listeningSocketfd.revents & POLLERR){
+            listeningSocketFailed = true;
+            std::cerr << "[!] Error: ListeningSocket error." << std::endl;
+            return;
+        }
+
+        if(listeningSocketfd.revents & POLLRDNORM){ // enter only if some request has come to listening socket
             
-            Socket newConnection{};
-            TCPConnection newtcpConnection(newConnection);
-            connections.push_back(newtcpConnection);
-            std::cout << "New Connection Accepted" << std::endl;
-            newtcpConnection.printClientInfo();
+            Socket newConnectionSocket{};
+            const bool res = listeningSocket._accept(newConnectionSocket);
 
-            WSAPOLLFD acceptedConnectionfd{};
-            acceptedConnectionfd.fd = newtcpConnection.handle.getSocket();
-            acceptedConnectionfd.events = POLLRDNORM | POLLWRNORM;
-            acceptedConnectionfd.revents = 0;
+            if(res){
+                connections.emplace_back(TCPConnection(newConnectionSocket, ctx));
+                std::cout << "~ New Connection Accepted" << std::endl;
+                TCPConnection& newTCPConnection = connections.back();
+                newTCPConnection.printClientInfo();
 
-            fdList.push_back(acceptedConnectionfd);
-        }
+                WSAPOLLFD newConnectionFd{};
+                newConnectionFd.fd = newTCPConnection.socket->getSocket();
+                newConnectionFd.events = POLLRDNORM | POLLWRNORM; // read + write event allowed
+                newConnectionFd.revents = 0;
 
-        for(int i=tempfdList.size()-1;i>=0;i--){
-            int connectionIndex = i-1;
-            TCPConnection& connection = connections[connectionIndex];
-            WSAPOLLFD& connectionfd = tempfdList[i];
-
-            if(connectionfd.revents & POLLERR){
-                closeConnection(connectionIndex, "POLLERR");
-                continue;
+                fdList.push_back(newConnectionFd);
+            }else{
+                std::cerr << "~ " << getWSAMessage(WSAGetLastError()) << std::endl;
             }
-            if(connectionfd.revents & POLLHUP){
-                closeConnection(connectionIndex, "POLLHUP");
-                continue;
-            }
-            if(connectionfd.revents & POLLNVAL){
-                closeConnection(connectionIndex, "POLLNVAL");
-                continue;
-            }            
+
+            for(int i=tempfdList.size()-1;i>=1;i--){
+                int connectionIndex = i-1;
+                TCPConnection& TCPconnection = connections[connectionIndex];
+                WSAPOLLFD& connectionfd = tempfdList[i];
+
+                if(connectionfd.revents & POLLERR){
+                    closeConnection(connectionIndex, "POLLERR");
+                    continue;
+                }
+                if(connectionfd.revents & POLLHUP){
+                    closeConnection(connectionIndex, "POLLHUP");
+                    continue;
+                }
+                if(connectionfd.revents & POLLNVAL){
+                    closeConnection(connectionIndex, "POLLNVAL");
+                    continue;
+                }     
  
-            if(tempfdList[i].revents & POLLRDNORM){ // this client is ready to read normal data without blocking
-                
+            // DSTYPE,
+            // DSNAMESZ,
+            // DSNAME,
+            // DSCOMMAND,
+            // KEYSZ,
+            // KEY,
+            // VALUEDT,
+            // VALUESZ,
+            // VALUE,
+            // DONE,
+    
+                // if(tempfdList[i].revents & POLLRDNORM){ // this client is ready to read normal data without blocking
+                //     int bytesReceived = 0;
+                //     if(connection.incommingPm.packet->getTask() == PacketTask::DSTYPE){
+                //         bytesReceived = recv(, )
+                //     }
 
 
+                // }
             }
-
         }
-
-
-
     }
+
 
     void Server::closeConnection(int connectionIndex, std::string&& reason){
         TCPConnection& connection = connections[connectionIndex];
+
         std::cout << "[" << reason << "] Connection lost: " << std::endl;
         connection.printClientInfo();
+
         fdList.erase(fdList.begin() + (connectionIndex + 1));
-        connection._close();
         connections.erase(connections.begin() + connectionIndex);
-    }   
+    }  
+
+    void Server::printServerInfo(){
+        listeningSocket.printSocketInfo();
+    }
+
+    int Server::getPollFailCount(){
+        return pollFailCount;
+    }
+
 }
 
 

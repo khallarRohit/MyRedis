@@ -1,23 +1,34 @@
-cmake_minimum_required(VERSION 3.10)
-project(MyRedis)
+cmake_minimum_required(VERSION 3.10.0)
+project(MyRedis VERSION 0.1.0 LANGUAGES C CXX)
 
-# ==========================================
-# Define the Single Executable
-# ==========================================
-# You must list EVERY .cpp file you want to compile here.
-add_executable(MyRedisServer 
-    main.cpp      
-    Error/error.cpp
-    Ip/ipendpoint.cpp
+set(COMMON_SOURCES 
+    Ip/ipendpoint.cpp 
+    Error/WSAexception.cpp
     Socket/socket.cpp
-    TCPConnection/tcpconnection.cpp 
-    Server/server.cpp
-    Network/network.cpp 
+    Network/network.cpp
+    TCPConnection/tcpconnection.cpp
 )
 
-# ==========================================
-# Fix Include Paths
-# ==========================================
-# This adds the root "MyRedis" folder to the include search path.
-# This allows you to write #include "Error/error.h" inside Ip/ipendpoint.cpp
-target_include_directories(MyRedisServer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(RedisCommon STATIC ${COMMON_SOURCES})
+
+target_link_libraries(RedisCommon PUBLIC ws2_32)
+
+target_include_directories(RedisCommon PUBLIC ${CMAKE_SOURCE_DIR})
+
+add_executable(RedisServer
+    server_main.cpp      # The main() for the server
+    Server/server.cpp    # The Server class logic
+)
+
+target_link_libraries(RedisServer PRIVATE RedisCommon)
+
+add_executable(RedisClient
+    client_main.cpp      # A NEW file: The main() for the client
+    Client/client.cpp    # A NEW file: The Client class logic
+)
+
+target_link_libraries(RedisClient PRIVATE RedisCommon)
+
+include(CTest)
+enable_testing()
+
