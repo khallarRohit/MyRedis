@@ -2,81 +2,45 @@
 
 namespace MyRedis{
 
-    Packet::Packet(){};
-
-    void Packet::resolveTask(uint32_t bytesReceived){
-        extractionOffset += bytesReceived;
-
-        if(packetTask == PacketTask::DSTYPE){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::DSNAMESZ;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::DSNAMESZ){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::DSNAME;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::DSNAME){
-            if(extractionOffset == packetQuery.dataStructureNameSize){
-                packetTask = PacketTask::DSCOMMAND;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::DSCOMMAND){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::KEYSZ;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::KEYSZ){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::KEY;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::KEY){
-            if(extractionOffset == packetQuery.keySize){
-                packetTask = PacketTask::VALUEDT;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::VALUEDT){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::VALUESZ;
-                extractionOffset = 0;
-            }
-        }else if(packetTask == PacketTask::VALUESZ){
-            if(extractionOffset == 4){
-                packetTask = PacketTask::VALUE;
-                extractionOffset = 0;
-            }   
-        }else if(packetTask == PacketTask::VALUE){
-            if(extractionOffset == packetQuery.valueSize){
-                packetTask = PacketTask::DONE;
-                extractionOffset = 0;
-                state = BufferState::FULL;
-            }
+    Packet::Packet(const QueryType& queryType) {
+        if(queryType == GET){
+            initializeAsGetQuery();
+        }else{
+            initializeAsPostQuery();
         }
+    };
+
+    void Packet::resolveTask(const uint32_t& bytesReceived){
+        this->packetQuery->resolveTask(bytesReceived);   
+    }
+
+    uint32_t Packet::getExtractionOffset(){
+        return this->packetQuery->getExtractionOffset();
     }
 
     void Packet::clear(){
-        packetQuery.clear();
-        cleanBuffer();
-        cleanTask();
-        extractionOffset = 0;
+        this->packetQuery->clear();
     }
 
     PacketTask Packet::getTask(){
-        return packetTask;
+        return this->packetQuery->getTask();
     }
-
-    void Packet::cleanBuffer(){
-        this->state = BufferState::NOTFULL;
-    }
-
-    void Packet::cleanTask(){
-        this->packetTask = PacketTask::DSTYPE;
-    }
-
+    
     BufferState Packet::getState(){
-        return state;
+        return this->packetQuery->getState();
+    }
+
+    void Packet::initializeAsGetQuery(){
+        if(packetQuery != nullptr){
+            return;
+        }
+        this->packetQuery = std::make_unique<GetQuery>();
+    }
+    void Packet::initializeAsPostQuery(){
+        if(packetQuery != nullptr){
+            return;
+        }
+        this->packetQuery = std::make_unique<PostQuery>();
     }
 
 }

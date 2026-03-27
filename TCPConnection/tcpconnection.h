@@ -1,6 +1,6 @@
 #pragma once
 #include "Socket/socket.h"
-// #include "Packet/packetmanager.h"
+#include "Packet/packetmanager.h"
 #include <memory>
 #include <memory>
 #include "SharedContext/sharedlock.h"
@@ -17,6 +17,6 @@ namespace MyRedis{
 
         void printClientInfo();        
         std::unique_ptr<Socket> socket;
-        // PacketManager incommingPm;        
+        std::unique_ptr<PacketManager> packetManager;
     };
 }

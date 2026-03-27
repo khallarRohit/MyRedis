@@ -22,4 +22,9 @@ namespace MyRedis{
         NOTFULL,
     };
 
+    enum QueryType{
+        GET,
+        POST
+    };
+
 }

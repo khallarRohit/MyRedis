@@ -2,6 +2,7 @@
 #include <vector>
 #include <iostream>
 #include <thread>
+#include "Packet/packettask.h"
 #include "Socket/socket.h"
 #include "Network/network.h"
 #include "SharedContext/sharedlock.h"

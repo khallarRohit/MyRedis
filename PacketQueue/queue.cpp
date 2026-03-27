@@ -5,14 +5,14 @@ namespace MyRedis{
     std::shared_ptr<ProcessQueue> ProcessQueue::instance{nullptr};
 
     ProcessQueue::ProcessQueue(std::shared_ptr<SharedLock> ctx)
-    :ctx(ctx){
-        std::cout << "Process Queue created successfully." << std::endl;
-    }
+    :ctx(ctx){}
 
     std::shared_ptr<ProcessQueue> ProcessQueue::getInstance(std::shared_ptr<SharedLock> ctx){
-        std::lock_guard<std::mutex> lock(ctx->queue_mtx);
         if(instance==nullptr){
-            instance = std::make_shared<ProcessQueue>(ctx);
+            std::lock_guard<std::mutex> lock(ctx->queue_mtx);
+            if(instance == nullptr){
+                instance = std::make_shared<ProcessQueue>(ctx);
+            }
         }
         return instance;
     }

@@ -4,23 +4,22 @@
 #include "packetexception.h"
 #include <vector>
 #include <cstdint>
+#include <memory>
 
 namespace MyRedis{
 
     class Packet{
     public:
-        Packet();
-        void resolveTask(uint32_t bytesReceived);
+        Packet(const QueryType& queryType);
+        void resolveTask(const uint32_t& bytesReceived);
         void clear();
         PacketTask getTask();
         BufferState getState();
+        uint32_t getExtractionOffset();
+        std::unique_ptr<PacketQuery> packetQuery{nullptr};
     private:
-        void cleanBuffer();
-        void cleanTask();
-        BufferState state{BufferState::NOTFULL};
-        PacketTask packetTask{PacketTask::DSTYPE};
-        PacketQuery packetQuery{};
-        uint32_t extractionOffset{};
+        void initializeAsGetQuery();
+        void initializeAsPostQuery();
     };
 
 

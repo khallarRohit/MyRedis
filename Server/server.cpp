@@ -137,46 +137,81 @@ namespace MyRedis{
             }else{
                 std::cerr << "~ " << getWSAMessage(WSAGetLastError()) << std::endl;
             }
+        }
 
-            for(int i=tempfdList.size()-1;i>=1;i--){
-                int connectionIndex = i-1;
-                TCPConnection& TCPconnection = connections[connectionIndex];
-                WSAPOLLFD& connectionfd = tempfdList[i];
+        for(int i=tempfdList.size()-1;i>=1;i--){
+            int connectionIndex = i-1;
+            TCPConnection& TCPConnection = connections[connectionIndex];
+            WSAPOLLFD& connectionfd = tempfdList[i];
 
-                if(connectionfd.revents & POLLERR){
-                    closeConnection(connectionIndex, "POLLERR");
+            if(connectionfd.revents & POLLERR){
+                closeConnection(connectionIndex, "POLLERR");
+                continue;
+            }
+            if(connectionfd.revents & POLLHUP){
+                closeConnection(connectionIndex, "POLLHUP");
+                continue;
+            }
+            if(connectionfd.revents & POLLNVAL){
+                closeConnection(connectionIndex, "POLLNVAL");
+                continue;
+            }    
+            
+            if(connectionfd.revents & POLLRDNORM){ // normal data can be read without blocking 
+                std::shared_ptr<Packet> packet = TCPConnection.packetManager->getPacket();
+                int bytesReceived = 0;
+                
+                if(packet == nullptr){
+                    bytesReceived = recv(connectionfd.fd,
+                        (char*)&TCPConnection.packetManager->queryType + TCPConnection.packetManager->extractionOffSet,
+                        sizeof(int32_t) - TCPConnection.packetManager->extractionOffSet, 0); 
+                    TCPConnection.packetManager->extractionOffSet += bytesReceived;
+
+                    if(TCPConnection.packetManager->extractionOffSet == sizeof(int32_t)){
+                        TCPConnection.packetManager->queryType = ntohs(TCPConnection.packetManager->queryType);
+                        if(TCPConnection.packetManager->queryType == 0){
+                            TCPConnection.packetManager->createPacket(GET);
+                        }else{
+                            TCPConnection.packetManager->createPacket(POST);
+                        }
+                    }
                     continue;
                 }
-                if(connectionfd.revents & POLLHUP){
-                    closeConnection(connectionIndex, "POLLHUP");
-                    continue;
+
+                char* targetBuffer = packet->packetQuery->getCurrentTargetBuffer();
+                int32_t targetSpaceLeft = packet->packetQuery->getRemainingBufferSize();
+
+                bytesReceived = recv(connectionfd.fd, targetBuffer, targetSpaceLeft, 0);
+                packet->resolveTask(bytesReceived);
+
+                if(packet->getState() == FULL){
+                    TCPConnection.packetManager->processPacket();
+                }    
+            }
+            
+            if(connectionfd.revents & POLLWRNORM){ // normal data can be written without blocking 
+                if(TCPConnection.packetManager->hasDataToSend()){
+                    const char* targetBuffer = TCPConnection.packetManager->getCurrentWriteBuffer();
+                    int32_t targetSpaceLeft = TCPConnection.packetManager->getWriteRemainingSize();
+
+                    int bytesSent = send(connectionfd.fd, targetBuffer, targetSpaceLeft, 0);
+
+                    if(bytesSent == SOCKET_ERROR){
+                        if(WSAGetLastError() != WSAEWOULDBLOCK) {
+                            closeConnection(connectionIndex, "Send Error");
+                            continue;
+                        }              
+                    }else if(bytesSent > 0){
+                        TCPConnection.packetManager->resolveWrite(bytesSent);
+                    }                    
                 }
-                if(connectionfd.revents & POLLNVAL){
-                    closeConnection(connectionIndex, "POLLNVAL");
-                    continue;
-                }     
- 
-            // DSTYPE,
-            // DSNAMESZ,
-            // DSNAME,
-            // DSCOMMAND,
-            // KEYSZ,
-            // KEY,
-            // VALUEDT,
-            // VALUESZ,
-            // VALUE,
-            // DONE,
-    
-                // if(tempfdList[i].revents & POLLRDNORM){ // this client is ready to read normal data without blocking
-                //     int bytesReceived = 0;
-                //     if(connection.incommingPm.packet->getTask() == PacketTask::DSTYPE){
-                //         bytesReceived = recv(, )
-                //     }
 
-
+                // if(!tcpConnection.manager->hasDataToSend()) {
+                //     fdList[i].events &= ~POLLWRNORM; 
                 // }
             }
         }
+        
     }
 
 
