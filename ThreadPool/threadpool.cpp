@@ -13,7 +13,7 @@ namespace MyRedis{
 
     void ThreadPool::initiate(){
         for(int i=0;i<noOfThreads;i++){
-            processThread.emplace_back(getPacket);
+            processThread.emplace_back(&ThreadPool::workerLoop, this);
         }
     }
 
@@ -24,14 +24,41 @@ namespace MyRedis{
         return poolInstance;
     }
 
+    void ThreadPool::workerLoop(){
+        while(true){
+            {
+                std::unique_lock<std::mutex> lock(ctx->queue_mtx);
+                ctx->queue_cv.wait(lock, [this]() {
+                    return ctx->queue_done || !packetQueue->empty();
+                });
+
+                if (ctx->queue_done && packetQueue->empty()) {
+                    return; // Shutdown signal received, exit the thread cleanly
+                }
+                // manager = packetQueue->front(); 
+                // packetQueue->pop();
+            }
+
+            if (manager) {
+                // Get the parsed RESP strings (e.g., ["ECHO", "hello world"])
+                std::vector<std::string> args = manager->getParsedArguments();
+                
+                // Let the CommandDispatcher magically route and execute the command!
+                dispatcher.dispatch(manager, args);
+            }
+        }
+    }
+
     ThreadPool::~ThreadPool(){
         {
             std::lock_guard<std::mutex> guard(ctx->queue_mtx);
             ctx->queue_done = true;
         }
         ctx->queue_cv.notify_all();
-        for(auto &i:processThread){
-            i.join();
+        for(auto &t:processThread){
+            if(t.joinable()){
+                t.join();
+            }
         }
     }
 

@@ -158,35 +158,20 @@ namespace MyRedis{
             }    
             
             if(connectionfd.revents & POLLRDNORM){ // normal data can be read without blocking 
-                std::shared_ptr<Packet> packet = TCPConnection.packetManager->getPacket();
-                int bytesReceived = 0;
+                char tempBuffer[4096];
+                int bytesReceived = recv(connectionfd.fd, tempBuffer, sizeof(tempBuffer), 0);
                 
-                if(packet == nullptr){
-                    bytesReceived = recv(connectionfd.fd,
-                        (char*)&TCPConnection.packetManager->queryType + TCPConnection.packetManager->extractionOffSet,
-                        sizeof(int32_t) - TCPConnection.packetManager->extractionOffSet, 0); 
-                    TCPConnection.packetManager->extractionOffSet += bytesReceived;
-
-                    if(TCPConnection.packetManager->extractionOffSet == sizeof(int32_t)){
-                        TCPConnection.packetManager->queryType = ntohs(TCPConnection.packetManager->queryType);
-                        if(TCPConnection.packetManager->queryType == 0){
-                            TCPConnection.packetManager->createPacket(GET);
-                        }else{
-                            TCPConnection.packetManager->createPacket(POST);
-                        }
-                    }
+                if(bytesReceived == 0){
+                    closeConnection(connectionIndex, "Client Disconnected"); 
                     continue;
                 }
+                if(bytesReceived == SOCKET_ERROR){
+                    if(WSAGetLastError() != WSAEWOULDBLOCK) closeConnection(connectionIndex, "Recv Error");
+                    continue;                    
+                }
 
-                char* targetBuffer = packet->packetQuery->getCurrentTargetBuffer();
-                int32_t targetSpaceLeft = packet->packetQuery->getRemainingBufferSize();
-
-                bytesReceived = recv(connectionfd.fd, targetBuffer, targetSpaceLeft, 0);
-                packet->resolveTask(bytesReceived);
-
-                if(packet->getState() == FULL){
-                    TCPConnection.packetManager->processPacket();
-                }    
+                std::shared_ptr<Packet> packet = TCPConnection.packetManager->getPacket();
+                packet->appendData(tempBuffer, bytesReceived);
             }
             
             if(connectionfd.revents & POLLWRNORM){ // normal data can be written without blocking 
@@ -213,7 +198,6 @@ namespace MyRedis{
         }
         
     }
-
 
     void Server::closeConnection(int connectionIndex, std::string&& reason){
         TCPConnection& connection = connections[connectionIndex];

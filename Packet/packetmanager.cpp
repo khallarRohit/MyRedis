@@ -4,65 +4,30 @@
 namespace MyRedis{
 
     PacketManager::PacketManager(std::shared_ptr<SharedLock> ctx){
-        processQueue = ProcessQueue::getInstance(ctx);
+        inQueue = InQueue::getInstance(ctx);
     }
 
-    void PacketManager::processPacket(){
-        processQueue->emplace(packet);
-        packet.reset();
+    void PacketManager::queueInPacket(){
+        inQueue->emplace(inPacket);
+        inPacket.reset();
     }
 
-    std::shared_ptr<ProcessQueue> PacketManager::getInstance(){
-        return processQueue;
-    };
-
-    std::shared_ptr<Packet> PacketManager::getPacket(){
-        return packet;
+    std::shared_ptr<InPacket> PacketManager::getInPacket(){
+        return inPacket;
     }
 
-    void PacketManager::createPacket(const QueryType& queryType){
-        packet.reset();
-        packet = std::make_shared<Packet>(queryType); 
+    void PacketManager::createInPacket(){
+        inPacket.reset();
+        inPacket = std::make_shared<InPacket>(); 
     }
 
-    void PacketManager::queueResponse(const std::string& response){
+    void PacketManager::queueResponse(std::shared_ptr<OutPacket> outPacket){
         std::lock_guard<std::mutex> lock(writeMutex);
-        if(currentWriteBuffer.empty()){
-            currentWriteBuffer = response;
-            bytesSentOffset = 0;
-        }else{
-            pendingResponses.push(response);
-        }
+        outQueue.push_back(outPacket);
     }
 
     bool PacketManager::hasDataToSend() const{
         // std::lock_guard<std::mutex> lock(writeMutex); // TODO
-        return !currentWriteBuffer.empty();
+        return !outQueue.empty();
     }
-
-    const char* PacketManager::getCurrentWriteBuffer() const{
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
-        return currentWriteBuffer.data() + bytesSentOffset;
-    }
-
-    uint32_t PacketManager::getWriteRemainingSize() const {
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
-        return currentWriteBuffer.size() - bytesSentOffset;
-    }
-
-    void PacketManager::resolveWrite(int32_t bytesSent){
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
-        bytesSentOffset += bytesSent;
-        
-        if(bytesSentOffset >= currentWriteBuffer.size()){
-            currentWriteBuffer.clear();
-            bytesSentOffset = 0;
-            
-            if (!pendingResponses.empty()) {
-                currentWriteBuffer = pendingResponses.front();
-                pendingResponses.pop();
-            }
-        }
-    }
-
 }
