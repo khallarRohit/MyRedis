@@ -25,7 +25,9 @@ namespace MyRedis{
     }
 
     std::optional<std::string> RedisList::lpop() {
-        if (internalList.empty()) return std::nullopt;
+        if (internalList.empty()){
+            return std::nullopt;
+        }
         
         std::string val = internalList.front();
         internalList.pop_front();
@@ -33,7 +35,9 @@ namespace MyRedis{
     }
 
     std::optional<std::string> RedisList::rpop() {
-        if (internalList.empty()) return std::nullopt;
+        if (internalList.empty()){
+            return std::nullopt;
+        }
         
         std::string val = internalList.back();
         internalList.pop_back();

@@ -16,11 +16,9 @@ namespace MyRedis{
         ~RedisList() override = default;
 
         DataType getType() const override;
-
         size_t size() const;
 
         int lpush(const std::vector<std::string>& elements);
-        
         int rpush(const std::vector<std::string>& elements);
         std::optional<std::string> lpop();
         std::optional<std::string> rpop();

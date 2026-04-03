@@ -33,5 +33,6 @@ public:
     void insert(const K& key, const V& value);
     V* find(const K& key) const;
     size_t erase(const K& key);
+    size_t size() const;
     
 };

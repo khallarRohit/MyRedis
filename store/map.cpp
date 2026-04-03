@@ -1,4 +1,5 @@
 #include "map.h"
+#include "rediszset.h"
 #include <string>
 
 
@@ -266,6 +267,15 @@ void Map<K,V>::copyTree(Node<K,V>*& thisNode, Node<K,V>* otherNode, Node<K,V>* p
     copyTree(thisNode->right, otherNode->right, thisNode, otherNull);
 }
 
+template<class K,class V>
+void Map<K,V>::inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result){
+    if (node != nullNode) {
+        inorder(node->left, nullNode, result);
+        result.push_back(node->key);
+        inorder(node->right, nullNode, result);
+    }   
+}
+
 
 /***********************************************************************************************/
 
@@ -341,6 +351,13 @@ void Map<K,V>::clear(){
     destroyTree(root);
     root = null;
     _size = 0;
+}
+
+template<class K, class V>
+std::vector<K> Map<K,V>::getSortedKeys() {
+    std::vector<K> result;
+    inorderHelper(root, null, result);
+    return result;
 }
 
 template<class K, class V>
@@ -513,3 +530,4 @@ void Map<K,V>::erase(K key){
 template class Map<int, std::string>;
 template class Map<std::string, std::string>;
 template class Map<std::string, bool>;
+template class Map<MyRedis::ZSetKey, bool>;

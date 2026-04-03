@@ -6,7 +6,6 @@ namespace MyRedis{
     }
 
     int RedisHash::hset(const std::string& field, const std::string& value) {
-        // Check if it's a new field to mimic standard Redis integer replies
         std::string* existing = internalMap.find(field);
         int isNewField = (existing == nullptr) ? 1 : 0;
         
@@ -15,7 +14,6 @@ namespace MyRedis{
     }
 
     std::optional<std::string> RedisHash::hget(const std::string& field) const {
-        // Your custom find() returns a pointer, making this very easy!
         std::string* valPtr = internalMap.find(field);
         if (valPtr != nullptr) {
             return *valPtr;
@@ -25,6 +23,24 @@ namespace MyRedis{
 
     size_t RedisHash::hdel(const std::string& field) {
         return internalMap.erase(field);
+    }
+
+    int RedisHash::hexists(const std::string& field) const {
+        return (internalMap.find(field) != nullptr) ? 1 : 0;
+    }
+
+    size_t RedisHash::hlen() const {
+        return internalMap.size();
+    }
+
+    std::optional<std::string> RedisHash::hgetdel(const std::string& field) {
+        std::string* valPtr = internalMap.find(field);
+        if (valPtr != nullptr) {
+            std::string valueCopy = *valPtr; 
+            internalMap.erase(field);
+            return valueCopy;
+        }
+        return std::nullopt;
     }
 
 }

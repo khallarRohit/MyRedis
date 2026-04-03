@@ -33,6 +33,11 @@ HashMap<K,V>::~HashMap(){
 }
 
 template<class K, class V>
+size_t HashMap<K,V>::size() const{
+    return element_count;
+}
+
+template<class K, class V>
 void HashMap<K,V>::rehash(){
     if(hash_size_index+1 >= _HASH_SIZE_LIST.size()){
         return;
@@ -126,3 +131,5 @@ size_t HashMap<K,V>::erase(const K& key){ // returns number of elements removed
 template class HashMap<int, int>;
 template class HashMap<int, std::string>;
 template class HashMap<std::string, std::string>;
+template class HashMap<std::string, double>;
+template class HashMap<std::string, bool>;

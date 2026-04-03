@@ -1,6 +1,7 @@
 #pragma once
 #include<utility>
 #include <stdexcept>
+#include <vector>
 
 enum Color {
     RED,
@@ -38,7 +39,7 @@ private:
     void balanceDelete(Node<K,V>* node);
     void destroyTree(Node<K,V>* node);
     void copyTree(Node<K,V>*& thisNode, Node<K,V>* otherNode, Node<K,V>* parent, Node<K,V>* otherNull);
-
+    void inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result);
 
 public:
     ~Map();
@@ -51,6 +52,7 @@ public:
     V& operator[](const K& key); // access, insert, update
     V& at(const K& key); // access with bound check(throw if not found)
     const V& at(const K& key) const; // const version of at()
+    std::vector<K> getSortedKeys();
 
     size_t size();
     bool empty();

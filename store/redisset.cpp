@@ -2,41 +2,34 @@
 
 namespace MyRedis{
 
-    DataType RedisSet::getType() const{ 
+    DataType RedisSet::getType() const { 
         return DataType::SET; 
     }
 
-    // --- REDIS COMMAND: SADD ---
-    // Adds multiple members. Returns the number of elements that were added 
-    // (does not count elements that already existed).
     int RedisSet::sadd(const std::vector<std::string>& members) {
-        int elementsAdded = 0;
+        int added = 0;
         for (const auto& member : members) {
-            // Your find() returns false if not found
-            if (!internalSet.find(member)) { 
-                internalSet.insert(member, true);
-                elementsAdded++;
+            if (internalMap.find(member) == nullptr) {
+                internalMap.insert(member, true);
+                added++;
             }
         }
-        return elementsAdded;
+        return added;
     }
 
-    // --- REDIS COMMAND: SISMEMBER ---
-    // Returns 1 if the member exists, 0 if it does not.
-    int RedisSet::sismember(const std::string& member) {
-        return internalSet.find(member) ? 1 : 0;
-    }
-
-    // --- REDIS COMMAND: SREM ---
-    // Removes members. Returns the number of elements successfully removed.
     int RedisSet::srem(const std::vector<std::string>& members) {
-        int elementsRemoved = 0;
+        int removed = 0;
         for (const auto& member : members) {
-            if (internalSet.find(member)) {
-                internalSet.erase(member);
-                elementsRemoved++;
-            }
+            removed += internalMap.erase(member);
         }
-        return elementsRemoved;
+        return removed;
+    }
+
+    size_t RedisSet::scard() const {
+        return internalMap.size(); 
+    }
+
+    int RedisSet::sismember(const std::string& member) const {
+        return (internalMap.find(member) != nullptr) ? 1 : 0;
     }
 }
