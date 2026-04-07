@@ -27,7 +27,6 @@ namespace MyRedis {
         Socket listeningSocket;
         std::vector<TCPConnection> connections;
         std::vector<WSAPOLLFD> fdList;
-        std::shared_ptr<SharedLock> ctx{nullptr};   
         int pollFailCount{5};  
     };
 

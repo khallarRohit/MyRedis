@@ -27,14 +27,12 @@ namespace MyRedis{
         IPEndpoint(const IPVersion& ipversion); // constructor initializes to default values
 
         // copy constructors
-        IPEndpoint(const IPEndpoint& ipendpoint); // shallow copy
+        IPEndpoint(const IPEndpoint& ipendpoint) = default; 
+        IPEndpoint& operator=(const IPEndpoint& ipendpoint) = default; 
 
         // construct IPEndpoint using info passed as parameters
         IPEndpoint(sockaddr* addr);
         IPEndpoint(const char* ip, const unsigned short port);
-
-        // = operator overload
-        IPEndpoint& operator=(const IPEndpoint& ipendpoint); // shallow copy
 
         // return a sockaddr_4, to be called when ipversion = IPv4
         sockaddr_in getSockaddrIPv4() const;
@@ -57,7 +55,7 @@ namespace MyRedis{
         // fills parameterized array wiht host ip-bytes
         std::array<uint8_t, 16> getIPBytes() const;
 
-        const bool getBound();
+        bool getBound() const;
 
     private:
         IPVersion ipversion{IPVersion::unknown};

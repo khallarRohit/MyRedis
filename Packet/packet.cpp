@@ -2,8 +2,20 @@
 
 namespace MyRedis{
 
-    const InPacket::BufferState InPacket::getBufferState() const{
+    const BufferState InPacket::getBufferState() const{
         return bufferState;
+    }
+
+    bool InPacket::hasReadyQueries() const {
+        return !readyQueries.empty();
+    }
+
+    std::vector<std::string> InPacket::popNextQuery() {
+        if (readyQueries.empty()) return {};
+        
+        std::vector<std::string> nextQuery = readyQueries.front();
+        readyQueries.pop();
+        return nextQuery;
     }
 
     void InPacket::appendData(const char* data, int length){
@@ -23,7 +35,7 @@ namespace MyRedis{
                 if(currentState == RESPState::EXPECTING_ARRAY_LEN){
                     if(line[0] == '*'){
                         expectedElements = std::stoi(line.substr(1));
-                        packetQuery.clear();
+                        currentQuery.clear();
 
                         if (expectedElements == 0) {
                             currentState = RESPState::EXPECTING_ARRAY_LEN; 
@@ -45,13 +57,13 @@ namespace MyRedis{
                 }
 
                 std::string argument = readBuffer.substr(0, currentBulkLength);
-                packetQuery.push_back(argument);
-
+                currentQuery.push_back(argument);
                 readBuffer.erase(0, totalRequiredBytes);
 
-                if(packetQuery.size() == expectedElements){
+                if(currentQuery.size() == expectedElements){
 
-                    // TODO => process command
+                    readyQueries.push(currentQuery);
+                    currentQuery.clear();
 
                     currentState = RESPState::EXPECTING_ARRAY_LEN;
                     expectedElements = 0;
@@ -63,19 +75,18 @@ namespace MyRedis{
         }
     }
 
+    OutPacket::OutPacket(const std::string& data) 
+    : writeBuffer(data) {}
     
     const char* OutPacket::getWriteBuffer() const{
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
         return writeBuffer.data() + bytesSentOffset;
     }
 
     uint32_t OutPacket::getWriteRemainingSize() const {
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
         return writeBuffer.size() - bytesSentOffset;
     }
 
     void OutPacket::resolveWrite(int32_t bytesSent){
-        // std::lock_guard<std::mutex> lock(writeMutex); // TODO
         bytesSentOffset += bytesSent;
         
         if(bytesSentOffset >= writeBuffer.size()){

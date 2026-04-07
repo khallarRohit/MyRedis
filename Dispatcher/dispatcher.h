@@ -14,10 +14,18 @@ namespace MyRedis{
 
     class Dispatcher{
     private:
+        Dispatcher() = default;
         std::unordered_map<std::string, CommandHandler> registry;   
         void registerCommand(std::string name, CommandHandler handler);
 
     public:
+        static std::shared_ptr<Dispatcher> getInstance();
+
+        ~Dispatcher() = default;
+
+        Dispatcher(const Dispatcher& dispatcher) = delete;
+        Dispatcher& operator=(const Dispatcher& dispatcher) = delete;
+
         void dispatch(std::shared_ptr<ProcessJob> job);
 
         void registerPING();

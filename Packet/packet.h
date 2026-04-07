@@ -1,6 +1,7 @@
 #pragma once
 #include "packetexception.h"
 #include <vector>
+#include <queue>
 #include <cstdint>
 #include <string>
 #include <memory>
@@ -21,7 +22,8 @@ namespace MyRedis{
         };
 
         std::string readBuffer{""};
-        std::vector<std::string> packetQuery;
+        std::vector<std::string> currentQuery;
+        std::queue<std::vector<std::string>> readyQueries;
 
         BufferState bufferState{NOTFULL};
         RESPState currentState{RESPState::EXPECTING_ARRAY_LEN};
@@ -31,10 +33,16 @@ namespace MyRedis{
     public:
         void appendData(const char* data, int length);
         const BufferState getBufferState() const;
+
+        bool hasReadyQueries() const;
+        std::vector<std::string> popNextQuery();
     };
 
     class OutPacket{
     public:
+        OutPacket(const std::string& data) : writeBuffer(data) {}
+        ~OutPacket() = default;
+        
         bool isEmpty() const;
         const char* getWriteBuffer() const;
         uint32_t getWriteRemainingSize() const;

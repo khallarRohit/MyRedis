@@ -8,12 +8,18 @@
 namespace MyRedis{
     class TCPConnection{
     public:
-        
-        // copies parameter socket into it's own.
-        TCPConnection(const Socket& socket, std::shared_ptr<SharedLock> ctx);
+        TCPConnection(const Socket&& socket);
 
         // create a socket of it's own
-        TCPConnection(std::shared_ptr<SharedLock> ctx); 
+        TCPConnection(); 
+
+        ~TCPConnection() = default;
+
+        TCPConnection(const TCPConnection&) = delete;
+        TCPConnection& operator=(const TCPConnection&) = delete;
+
+        TCPConnection(TCPConnection&&) noexcept = default;
+        TCPConnection& operator=(TCPConnection&&) noexcept = default;
 
         void printClientInfo();        
         std::unique_ptr<Socket> socket;

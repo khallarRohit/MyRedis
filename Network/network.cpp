@@ -11,18 +11,19 @@
 
 namespace MyRedis{
 
-    void Network::initialize(){
+    Network::Network() {
         WSAData wsadata;
         int res = WSAStartup(MAKEWORD(2, 2), &wsadata);
-        if(res != 0){
-            throwWSAError("Network/network.cpp line:18");
+        if (res != 0) {
+            throw std::system_error(res, std::system_category(), "WSAStartup failed");
         }
     }
 
-    void Network::shutdown(){
+    Network::~Network() {
+        // Automatically called when the Network object goes out of scope
         int res = WSACleanup();
-        if(res == SOCKET_ERROR){
-            throwWSAError("Network/network.cpp line:25");
+        if (res == SOCKET_ERROR) {
+            std::cerr << "[!] Warning: WSACleanup failed during shutdown." << std::endl;
         }
     }
 

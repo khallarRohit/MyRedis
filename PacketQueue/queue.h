@@ -1,41 +1,34 @@
 #pragma once
 #include <iostream>
 #include "Packet/packet.h"
+#include "Packet/packetmanager.h"
 #include "SharedContext/sharedlock.h"
 #include <queue>
 #include <mutex>
 #include <memory>
 
+
 namespace MyRedis{
 
     class InQueue{
     public:
-        static std::shared_ptr<InQueue> getInstance(std::shared_ptr<SharedLock> ctx);
         InQueue(const InQueue&) = delete;
         InQueue& operator=(const InQueue&) = delete;
-        void emplace(std::shared_ptr<Packet>newPacket);
-        void pop();
 
-        ~InQueue();
-        
+        static std::shared_ptr<InQueue> getInstance();
+
+        void emplace(std::shared_ptr<ProcessJob> job);
+        std::shared_ptr<ProcessJob> pop();
+        void shutdown();
+
+        ~InQueue() = default;
     private:
-        InQueue(std::shared_ptr<SharedLock> ctx);
-        std::shared_ptr<SharedLock> ctx;
-        static std::shared_ptr<InQueue> instance;
-        std::queue<std::shared_ptr<Packet>> packetQueue;
-    };
+        InQueue() = default;
+        bool shutting_down = false;
 
-    
-    
-    
-
-    class OutQueue{
-    public:
-
-
-    private:
-        int32_t clientCount = 0;
-
+        std::mutex queue_mtx;
+        std::condition_variable queue_cv;
+        std::queue<std::shared_ptr<ProcessJob>> queue;
     };
 
 }

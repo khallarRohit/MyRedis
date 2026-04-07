@@ -66,7 +66,6 @@ namespace MyRedis{
     
     Server::Server(const IPEndpoint&& ipendpoint)
     :listeningSocket(ipendpoint){
-        ctx = std::make_shared<SharedLock>();
         std::cout << "Listening Socket created successfully" << std::endl;
     }
 
@@ -86,8 +85,16 @@ namespace MyRedis{
     }
 
     void Server::frame(int& failCount, bool& listeningSocketFailed){
-        std::vector<WSAPOLLFD> tempfdList = fdList;
+        for(size_t i = 1; i < fdList.size(); i++) {
+            int connIdx = i - 1;
+            if (connections[connIdx].packetManager->hasDataToSend()) {
+                fdList[i].events |= POLLWRNORM;  // Turn ON write polling
+            } else {
+                fdList[i].events &= ~POLLWRNORM; // Turn OFF write polling
+            }
+        }
 
+        std::vector<WSAPOLLFD> tempfdList = fdList;
         int res = WSAPoll(tempfdList.data(), tempfdList.size(), 1000);
         if(res == 0) { // no sockets were in the queried state before the timer expired.
             return;
@@ -123,7 +130,7 @@ namespace MyRedis{
             const bool res = listeningSocket._accept(newConnectionSocket);
 
             if(res){
-                connections.emplace_back(TCPConnection(newConnectionSocket, ctx));
+                connections.emplace_back(TCPConnection(std::move(newConnectionSocket)));
                 std::cout << "~ New Connection Accepted" << std::endl;
                 TCPConnection& newTCPConnection = connections.back();
                 newTCPConnection.printClientInfo();
@@ -170,30 +177,26 @@ namespace MyRedis{
                     continue;                    
                 }
 
-                std::shared_ptr<Packet> packet = TCPConnection.packetManager->getPacket();
-                packet->appendData(tempBuffer, bytesReceived);
+                TCPConnection.packetManager->processReceivedData(tempBuffer, bytesReceived);
             }
             
             if(connectionfd.revents & POLLWRNORM){ // normal data can be written without blocking 
                 if(TCPConnection.packetManager->hasDataToSend()){
-                    const char* targetBuffer = TCPConnection.packetManager->getCurrentWriteBuffer();
-                    int32_t targetSpaceLeft = TCPConnection.packetManager->getWriteRemainingSize();
+                    const char* targetBuffer = TCPConnection.packetManager->getWriteBuffer();
+                    std::optional<int32_t> targetSpaceLeft = TCPConnection.packetManager->getWriteRemainingSize();
 
-                    int bytesSent = send(connectionfd.fd, targetBuffer, targetSpaceLeft, 0);
-
-                    if(bytesSent == SOCKET_ERROR){
-                        if(WSAGetLastError() != WSAEWOULDBLOCK) {
-                            closeConnection(connectionIndex, "Send Error");
-                            continue;
-                        }              
-                    }else if(bytesSent > 0){
-                        TCPConnection.packetManager->resolveWrite(bytesSent);
-                    }                    
+                    if(targetBuffer != nullptr and targetSpaceLeft != std::nullopt){
+                        int bytesSent = send(connectionfd.fd, targetBuffer, targetSpaceLeft.value(), 0);
+                        if(bytesSent == SOCKET_ERROR){
+                            if(WSAGetLastError() != WSAEWOULDBLOCK) {
+                                closeConnection(connectionIndex, "Send Error");
+                                continue;
+                            }              
+                        }else if(bytesSent > 0){
+                            TCPConnection.packetManager->resolveWrite(bytesSent);
+                        } 
+                    }                   
                 }
-
-                // if(!tcpConnection.manager->hasDataToSend()) {
-                //     fdList[i].events &= ~POLLWRNORM; 
-                // }
             }
         }
         

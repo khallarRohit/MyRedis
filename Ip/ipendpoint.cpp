@@ -51,17 +51,6 @@ namespace MyRedis{
     IPEndpoint::IPEndpoint(const IPVersion& ipversion)
     :ipversion(ipversion){}
 
-    IPEndpoint::IPEndpoint(const IPEndpoint& ipendpoint){
-        this->hostname = ipendpoint.hostname;
-        for(int i=0;i<16;i++){
-            this->ipBytes[i] = ipendpoint.ipBytes[i];
-        }
-        this->ipS = ipendpoint.ipS;
-        this->ipversion = ipendpoint.ipversion;
-        this->port = ipendpoint.port;
-        this->isBound = true;
-    }
-
     IPEndpoint::IPEndpoint(const char* ip, unsigned short port){
         this->port = port;
         addrinfo hints{};
@@ -95,15 +84,17 @@ namespace MyRedis{
             ipversion = IPVersion::IPv4;
             memcpy(&ipBytes[0], &v4->sin_addr, sizeof(ULONG));
     
-            ipS.resize(16);
-            inet_ntop(AF_INET, &v4->sin_addr, &ipS[0], 16);            
+            char tempBuffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &v4->sin_addr, tempBuffer, INET_ADDRSTRLEN); 
+            ipS = tempBuffer;           
         }else{
             sockaddr_in6* v6 = reinterpret_cast<sockaddr_in6*>(ptr->ai_addr);
             ipversion = IPVersion::IPv6;
             memcpy(&ipBytes[0], &v6->sin6_addr, 16);
 
-            ipS.resize(46);
-            inet_ntop(AF_INET6, &v6->sin6_addr, &ipS[0], 46);
+            char tempBuffer6[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, &v6->sin6_addr, tempBuffer6, INET6_ADDRSTRLEN);
+            ipS = tempBuffer6;
         }  
 
         hostname = ip;
@@ -115,32 +106,22 @@ namespace MyRedis{
         if (addr->sa_family == AF_INET){
             sockaddr_in * addrv4 = reinterpret_cast<sockaddr_in*>(addr);
             ipversion = IPVersion::IPv4;
-            port = ntohl(addrv4->sin_port);
+            port = ntohs(addrv4->sin_port);
             memcpy(&ipBytes[0], &addrv4->sin_addr, sizeof(ULONG));
-            ipS.resize(16);
-            inet_ntop(AF_INET6, &addrv4->sin_addr, &ipS[0], 16);
+            char tempBuffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &addrv4->sin_addr, tempBuffer, INET_ADDRSTRLEN);
+            ipS = tempBuffer;
         }else{
             sockaddr_in6 * addrv6 = reinterpret_cast<sockaddr_in6*>(addr);
             ipversion = IPVersion::IPv6;
             port = ntohs(addrv6->sin6_port);
             memcpy(&ipBytes[0], &addrv6->sin6_addr, 16);
-            ipS.resize(46);
-            inet_ntop(AF_INET6, &addrv6->sin6_addr, &ipS[0], 46);
+            char tempBuffer6[INET6_ADDRSTRLEN];
+            inet_ntop(AF_INET6, &addrv6->sin6_addr, tempBuffer6, INET6_ADDRSTRLEN);
+            ipS = tempBuffer6;
         }
         hostname = ipS;
         this->isBound = true;
-    }
-
-    IPEndpoint& IPEndpoint::operator=(const IPEndpoint& ipendpoint){
-        this->hostname = ipendpoint.hostname;
-        for(int i=0;i<16;i++){
-            this->ipBytes[i] = ipendpoint.ipBytes[i];
-        }
-        this->ipS = ipendpoint.ipS;
-        this->ipversion = ipendpoint.ipversion;
-        this->port = ipendpoint.port;
-        this->isBound = true;
-        return *this;
     }
 
     sockaddr_in IPEndpoint::getSockaddrIPv4() const{
@@ -165,7 +146,7 @@ namespace MyRedis{
         return addr;
     }
 
-    const bool IPEndpoint::getBound(){
+    bool IPEndpoint::getBound() const{
         return isBound;
     }
 

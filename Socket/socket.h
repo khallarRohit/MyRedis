@@ -16,20 +16,18 @@ namespace MyRedis{
     class Socket{
         public:
             Socket(); // constructor initializes to default values
+            ~Socket();
 
-            // copy constructor
-            Socket(const Socket& handle); // shallow copy
-            // Socket(Socket&& handle) noexcept;  // move   
+            Socket(const Socket& handle) = delete; // shallow copy
+            Socket& operator=(const Socket& handle) = delete; // shallow assignment
+
+            Socket(Socket&& handle) noexcept;  // move  
+            Socket& operator=(Socket&& handle) noexcept;  // move
 
             // create a new instance of socket using the parameters passed
             Socket(const IPEndpoint& ipendpoint, SOCKET& skt); 
             Socket(const IPEndpoint& ipendpoint); 
             Socket(const IPVersion& ipversion);
-            
-            // = operator overload
-            Socket& operator=(const Socket& handle); // shallow copy
-            // Socket& operator=(Socket&& handle) noexcept;  // move
-
 
             void _close();
             void _listen();

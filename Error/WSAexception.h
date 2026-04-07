@@ -1,6 +1,10 @@
 #pragma once
+#include <string>
 #include <system_error>
 
-void throwWSAError(const std::string& context);
+namespace MyRedis{
+    void throwWSAError(const std::string& context);
 
-const std::string getWSAMessage(int errorCode);
+    std::string getWSAMessage(int errorCode);
+}
+

@@ -117,9 +117,10 @@ namespace MyRedis{
 
     Socket::Socket(){};
 
-    Socket::Socket(const Socket& handle){
-        this->skt = handle.skt;
-        this->ipendpoint = handle.ipendpoint;
+    Socket::Socket(Socket&& handle) noexcept 
+    : ipendpoint(handle.ipendpoint), skt(handle.skt), isBound(handle.isBound) {
+        handle.skt = INVALID_SOCKET; 
+        handle.isBound = false;
     }
 
     Socket::Socket(const IPEndpoint& ipendpoint)
@@ -170,9 +171,18 @@ namespace MyRedis{
         }
     }
 
-    Socket& Socket::operator=(const Socket& handle){
-        this->skt = handle.skt;
-        this->ipendpoint = handle.ipendpoint;
+    Socket& Socket::operator=(Socket&& handle) noexcept {
+        if (this != &handle) {
+            if (skt != INVALID_SOCKET) {
+                closesocket(skt); 
+            }
+            ipendpoint = handle.ipendpoint;
+            skt = handle.skt;
+            isBound = handle.isBound;
+            
+            handle.skt = INVALID_SOCKET; // Steal the resource
+            handle.isBound = false;
+        }
         return *this;
     }
 
@@ -191,7 +201,7 @@ namespace MyRedis{
 
     void Socket::_close(){
         if(skt == INVALID_SOCKET){
-            throw std::system_error(MyRedis::Error::UninitializedSocket, "Socket/socket.cpp line:194");
+            return;
         }
 
         int res = closesocket(skt);
@@ -283,30 +293,27 @@ namespace MyRedis{
         }
 
         if(res != 0){
-            // int error = WSAGetLastError();
+            int error = WSAGetLastError();
 
-            // if (error == WSAEWOULDBLOCK) { // trying to connect
-            //     fd_set writeFds;
-            //     FD_ZERO(&writeFds);
-            //     FD_SET(skt, &writeFds);
+            if (error == WSAEWOULDBLOCK) { // trying to connect
+                fd_set writeFds;
+                FD_ZERO(&writeFds);
+                FD_SET(skt, &writeFds);
 
-            //     // Wait up to 2 seconds for connection
-            //     timeval timeout = { 2, 0 }; // Wait up to 2 seconds
-            //     int selectRes = select(0, NULL, &writeFds, NULL, &timeout);     
+                timeval timeout = { 2, 0 }; // Wait up to 2 seconds
+                int selectRes = select(0, NULL, &writeFds, NULL, &timeout);     
                 
-            //     if (selectRes > 0) {
-            //         // Connection successful! (Socket is writable)
-            //         return; 
-            //     } else if (selectRes == 0) {
-            //         throw std::system_error(std::error_code(WSAETIMEDOUT, std::system_category()), "Connection timed out");
-            //     } else {
-            //         throwWSAError("Socket/socket.cpp line:303");
-            //     }
-            // }
-            // else {
-                // throwWSAError("Socket/socket.cpp line:307");
-            // }
-            throwWSAError("Socket/socket.cpp line:309");
+                if (selectRes > 0) {
+                    return; 
+                } else if (selectRes == 0) {
+                    throw std::system_error(std::error_code(WSAETIMEDOUT, std::system_category()), "Connection timed out");
+                } else {
+                    throwWSAError("Socket/socket.cpp line:311");
+                }
+            }
+            else {
+                throwWSAError("Socket/socket.cpp line:315");
+            }
         }
     }
 

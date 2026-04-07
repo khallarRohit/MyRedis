@@ -2,6 +2,13 @@
 
 namespace MyRedis{
 
+    std::shared_ptr<Dispatcher> Dispatcher::dispatcher{nullptr};
+
+    std::shared_ptr<Dispatcher> Dispatcher::getInstance(){
+        static std::shared_ptr<Dispatcher> instance = std::shared_ptr<Dispatcher>(new Dispatcher());
+        return instance;
+    }
+
     void Dispatcher::registerCommand(std::string name, CommandHandler handler){
         std::transform(name.begin(), name.end(), name.begin(), ::toupper);
         registry[name] = handler;
@@ -203,7 +210,7 @@ namespace MyRedis{
         });
 
         // COMMAND: HEXISTS key field
-        dispatcher.registerCommand("HEXISTS", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HEXISTS", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
@@ -219,7 +226,7 @@ namespace MyRedis{
         });
 
         // COMMAND: HLEN key
-        dispatcher.registerCommand("HLEN", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HLEN", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 2) {
                 try {
@@ -235,7 +242,7 @@ namespace MyRedis{
         });
 
         // COMMAND: HGETDEL key field
-        dispatcher.registerCommand("HGETDEL", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HGETDEL", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
@@ -353,7 +360,7 @@ namespace MyRedis{
         });
 
         // COMMAND: SCARD key
-        dispatcher.registerCommand("SCARD", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("SCARD", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 2) {
                 try {
@@ -368,7 +375,7 @@ namespace MyRedis{
         });
 
         // COMMAND: SREM key member [member ...]
-        dispatcher.registerCommand("SREM", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("SREM", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() >= 3) {
                 try {
@@ -428,7 +435,7 @@ namespace MyRedis{
         });
     
         // COMMAND: ZCARD key
-        dispatcher.registerCommand("ZCARD", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("ZCARD", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 2) {
                 try {
@@ -443,7 +450,7 @@ namespace MyRedis{
         });
 
         // COMMAND: ZCOUNT key min max
-        dispatcher.registerCommand("ZCOUNT", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("ZCOUNT", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 4) {
                 try {
@@ -464,7 +471,7 @@ namespace MyRedis{
         });
 
         // COMMAND: ZRANK key member
-        dispatcher.registerCommand("ZRANK", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("ZRANK", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
@@ -483,7 +490,7 @@ namespace MyRedis{
         });
 
         // COMMAND: ZSCORE key member
-        dispatcher.registerCommand("ZSCORE", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("ZSCORE", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
