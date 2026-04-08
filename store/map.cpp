@@ -320,7 +320,7 @@ Map<K,V>& Map<K,V>::operator=(const Map& map) {
 
 // Move Constructor
 template<class K, class V>
-Map<K,V>::Map(Map&& map) noexcept : root(map.root), null(map.null), _size(other._size) {
+Map<K,V>::Map(Map&& map) noexcept : root(map.root), null(map.null), _size(map._size) {
     map.null = new Node<K,V>();
     map.null->color = BLACK;
     map.root = map.null;
@@ -356,7 +356,7 @@ void Map<K,V>::clear(){
 template<class K, class V>
 std::vector<K> Map<K,V>::getSortedKeys() {
     std::vector<K> result;
-    inorderHelper(root, null, result);
+    inorder(root, null, result);
     return result;
 }
 

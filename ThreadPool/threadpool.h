@@ -1,6 +1,4 @@
 #pragma once
-#include "PacketQueue/queue.h"
-#include "Dispatcher/dispatcher.h"
 #include <iostream>
 #include <vector>
 #include <mutex>
@@ -11,23 +9,26 @@
 
 namespace MyRedis{
 
+    class InQueue;
+    class Dispatcher;
+
     class ThreadPool{
     private:
         ThreadPool();
 
-        std::shared_ptr<Dispatcher> dispatcher;
         int noOfThreads = 10;
-        
+        std::vector<std::thread> processThreads;        
         std::shared_ptr<InQueue> inQueue;
-        std::vector<std::thread> processThreads;
-
+        
         void workerLoop();
 
     public:
         ThreadPool(const ThreadPool&) = delete;
         ThreadPool& operator=(const ThreadPool&) = delete;
 
-        static std::shared_ptr<ThreadPool> getInstance();
+        
+
+        static ThreadPool& getInstance();
         void initiate();
 
         ~ThreadPool();

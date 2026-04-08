@@ -1,11 +1,11 @@
 #include "threadpool.h"
-
+#include "PacketQueue/queue.h"
+#include "Dispatcher/dispatcher.h"
 
 namespace MyRedis{
 
-    ThreadPool::ThreadPool(){
-        inQueue = InQueue::getInstance();
-        dispatcher = Dispatcher::getInstance();
+    ThreadPool::ThreadPool()
+    :inQueue(InQueue::getInstance()){
         initiate();
     }
 
@@ -15,8 +15,8 @@ namespace MyRedis{
         }
     }
 
-    std::shared_ptr<ThreadPool> ThreadPool::getInstance(){
-        static std::shared_ptr<ThreadPool> instance = std::shared_ptr<ThreadPool>(new ThreadPool());
+    ThreadPool& ThreadPool::getInstance(){
+        static ThreadPool instance;
         return instance;
     }
 
@@ -27,7 +27,7 @@ namespace MyRedis{
                 return; 
             }
 
-            dispatcher->dispatch(job);
+            Dispatcher::getInstance().dispatch(job);
         }
     }
 

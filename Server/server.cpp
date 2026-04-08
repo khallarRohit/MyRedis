@@ -1,4 +1,8 @@
 #include "server.h"
+#include "Dispatcher/dispatcher.h"
+#include "PacketQueue/queue.h"
+#include "ThreadPool/threadpool.h"
+#include "store/database.h"
 
 /*
     WSAPOLLFD struct store information used by WSAPoll function
@@ -64,24 +68,39 @@
 namespace MyRedis{
 
     
-    Server::Server(const IPEndpoint&& ipendpoint)
-    :listeningSocket(ipendpoint){
+    Server::Server(IPEndpoint&& ipendpoint)
+    :listeningSocket(ipendpoint), dispatcher(Dispatcher::getInstance()), 
+    pool(ThreadPool::getInstance()), database(std::make_shared<RedisDatabase>()){
         std::cout << "Listening Socket created successfully" << std::endl;
     }
 
     void Server::initialize(){
         fdList.clear();
-        connections.clear();      
+        connections.clear();  
+        
+        // Listening Socket initialization
 
         listeningSocket._listen(); // tries to bind socket to endpoint + listen on the endpoint
         std::cout << "Socket is listening" << std::endl;
 
-        WSAPOLLFD listeningSocketfd{};
-        listeningSocketfd.fd = listeningSocket.getSocket();
-        listeningSocketfd.events = POLLRDNORM; // reading event
-        listeningSocketfd.revents = 0;
+        WSAPOLLFD listeningSocketWSA{};
+        listeningSocketWSA.fd = listeningSocket.getSocket();
+        listeningSocketWSA.events = POLLRDNORM; // reading event
+        listeningSocketWSA.revents = 0;
 
-        fdList.push_back(listeningSocketfd);
+        fdList.push_back(listeningSocketWSA);
+
+
+        // dispatcher initialization
+
+        dispatcher.registerStringCommands(database);
+        dispatcher.registeHashCommands(database);
+        dispatcher.registeListCommands(database);
+        dispatcher.registeSetCommands(database);
+        dispatcher.registeZSetCommands(database);
+
+        dispatcher.registerPING();
+        dispatcher.registerECHO();
     }
 
     void Server::frame(int& failCount, bool& listeningSocketFailed){
@@ -110,24 +129,24 @@ namespace MyRedis{
             throwWSAError("Server/server.cpp line:102");
         }
 
-        WSAPOLLFD& listeningSocketfd = tempfdList[0];
+        WSAPOLLFD& listeningSocketWSA = tempfdList[0];
 
-        if(listeningSocketfd.revents & POLLNVAL){
+        if(listeningSocketWSA.revents & POLLNVAL){
             listeningSocketFailed = true;
             std::cerr << "[!] Error: Invalid ListeningSocket." << std::endl; 
             return;
         }
         
-        if(listeningSocketfd.revents & POLLERR){
+        if(listeningSocketWSA.revents & POLLERR){
             listeningSocketFailed = true;
             std::cerr << "[!] Error: ListeningSocket error." << std::endl;
             return;
         }
 
-        if(listeningSocketfd.revents & POLLRDNORM){ // enter only if some request has come to listening socket
+        if(listeningSocketWSA.revents & POLLRDNORM){ // enter only if some request has come to listening socket
             
             Socket newConnectionSocket{};
-            const bool res = listeningSocket._accept(newConnectionSocket);
+            bool res = listeningSocket._accept(newConnectionSocket);
 
             if(res){
                 connections.emplace_back(TCPConnection(std::move(newConnectionSocket)));
@@ -148,25 +167,25 @@ namespace MyRedis{
 
         for(int i=tempfdList.size()-1;i>=1;i--){
             int connectionIndex = i-1;
-            TCPConnection& TCPConnection = connections[connectionIndex];
-            WSAPOLLFD& connectionfd = tempfdList[i];
+            TCPConnection& tcpConnection = connections[connectionIndex];
+            WSAPOLLFD& connectionWSA = tempfdList[i];
 
-            if(connectionfd.revents & POLLERR){
+            if(connectionWSA.revents & POLLERR){
                 closeConnection(connectionIndex, "POLLERR");
                 continue;
             }
-            if(connectionfd.revents & POLLHUP){
+            if(connectionWSA.revents & POLLHUP){
                 closeConnection(connectionIndex, "POLLHUP");
                 continue;
             }
-            if(connectionfd.revents & POLLNVAL){
+            if(connectionWSA.revents & POLLNVAL){
                 closeConnection(connectionIndex, "POLLNVAL");
                 continue;
             }    
             
-            if(connectionfd.revents & POLLRDNORM){ // normal data can be read without blocking 
+            if(connectionWSA.revents & POLLRDNORM){ // normal data can be read without blocking 
                 char tempBuffer[4096];
-                int bytesReceived = recv(connectionfd.fd, tempBuffer, sizeof(tempBuffer), 0);
+                int bytesReceived = recv(connectionWSA.fd, tempBuffer, sizeof(tempBuffer), 0);
                 
                 if(bytesReceived == 0){
                     closeConnection(connectionIndex, "Client Disconnected"); 
@@ -177,23 +196,23 @@ namespace MyRedis{
                     continue;                    
                 }
 
-                TCPConnection.packetManager->processReceivedData(tempBuffer, bytesReceived);
+                tcpConnection.packetManager->processReceivedData(tempBuffer, bytesReceived);
             }
             
-            if(connectionfd.revents & POLLWRNORM){ // normal data can be written without blocking 
-                if(TCPConnection.packetManager->hasDataToSend()){
-                    const char* targetBuffer = TCPConnection.packetManager->getWriteBuffer();
-                    std::optional<int32_t> targetSpaceLeft = TCPConnection.packetManager->getWriteRemainingSize();
+            if(connectionWSA.revents & POLLWRNORM){ // normal data can be written without blocking 
+                if(tcpConnection.packetManager->hasDataToSend()){
+                    const char* targetBuffer = tcpConnection.packetManager->getWriteBuffer();
+                    std::optional<int32_t> targetSpaceLeft = tcpConnection.packetManager->getWriteRemainingSize();
 
                     if(targetBuffer != nullptr and targetSpaceLeft != std::nullopt){
-                        int bytesSent = send(connectionfd.fd, targetBuffer, targetSpaceLeft.value(), 0);
+                        int bytesSent = send(connectionWSA.fd, targetBuffer, targetSpaceLeft.value(), 0);
                         if(bytesSent == SOCKET_ERROR){
                             if(WSAGetLastError() != WSAEWOULDBLOCK) {
                                 closeConnection(connectionIndex, "Send Error");
                                 continue;
                             }              
                         }else if(bytesSent > 0){
-                            TCPConnection.packetManager->resolveWrite(bytesSent);
+                            tcpConnection.packetManager->resolveWrite(bytesSent);
                         } 
                     }                   
                 }

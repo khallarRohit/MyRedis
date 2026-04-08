@@ -64,10 +64,10 @@ namespace MyRedis{
         // zset
         int zadd(const std::string& key, double score, const std::string& member);
         std::vector<std::string> zrange(const std::string& key, int start, int stop);
-        size_t RedisDatabase::zcard(const std::string& key);
-        size_t RedisDatabase::zcount(const std::string& key, double min, double max);
-        std::optional<int> RedisDatabase::zrank(const std::string& key, const std::string& member);
-        std::optional<double> RedisDatabase::zscore(const std::string& key, const std::string& member);
+        size_t zcard(const std::string& key);
+        size_t zcount(const std::string& key, double min, double max);
+        std::optional<int> zrank(const std::string& key, const std::string& member);
+        std::optional<double> zscore(const std::string& key, const std::string& member);
 
     };
 }

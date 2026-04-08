@@ -4,25 +4,27 @@
 #include <queue>
 #include <memory>
 #include <optional>
+#include <mutex>
 
 
 namespace MyRedis{
 
     class PacketManager;
-
-    class ProcessJob{
-    public:
-        std::vector<std::string> packetQuery;
-        std::shared_ptr<PacketResponseManager> packetResponseManager;
-
-        ProcessJob(std::vector<std::string> query, PacketManager* packetManager);
-        ~ProcessJob() = default;
-    };
+    class InQueue;
 
     class PacketResponseManager{
     public:
         virtual ~PacketResponseManager() = default;
         virtual void queueResponse(const std::string& responseStr) = 0;
+    };
+
+    class ProcessJob{
+    public:
+        std::vector<std::string> packetQuery;
+        PacketResponseManager* packetResponseManager;
+
+        ProcessJob(std::vector<std::string> query, PacketManager* packetManager);
+        ~ProcessJob() = default;
     };
 
     class PacketManager: public PacketResponseManager{

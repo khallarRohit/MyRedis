@@ -3,7 +3,12 @@
 namespace MyRedis{
     bool ZSetKey::operator<(const ZSetKey& other) const {
         if (score != other.score) return score < other.score;
-        return member < other.member; // Tie-breaker!
+        return member < other.member; 
+    }
+
+    bool ZSetKey::operator<=(const ZSetKey& other) const {
+        if (score != other.score) return score < other.score;
+        return member <= other.member; 
     }
 
     // How the Red-Black tree knows they are exactly the same

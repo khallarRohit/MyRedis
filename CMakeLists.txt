@@ -7,6 +7,21 @@ set(COMMON_SOURCES
     Socket/socket.cpp
     Network/network.cpp
     TCPConnection/tcpconnection.cpp
+    Packet/packet.cpp
+    Packet/packetexception.cpp
+    Packet/packetmanager.cpp
+    PacketQueue/queue.cpp
+    ThreadPool/threadpool.cpp
+    store/database.cpp
+    store/hashmap.cpp
+    store/map.cpp
+    store/object.cpp
+    store/redishash.cpp
+    store/redislist.cpp
+    store/redisset.cpp
+    store/redisstring.cpp
+    store/rediszset.cpp
+    Dispatcher/dispatcher.cpp
 )
 
 add_library(RedisCommon STATIC ${COMMON_SOURCES})
@@ -24,7 +39,7 @@ target_link_libraries(RedisServer PRIVATE RedisCommon)
 
 add_executable(RedisClient
     client_main.cpp      # A NEW file: The main() for the client
-    Client/client.cpp    # A NEW file: The Client class logic
+    # Client/client.cpp    # A NEW file: The Client class logic
 )
 
 target_link_libraries(RedisClient PRIVATE RedisCommon)

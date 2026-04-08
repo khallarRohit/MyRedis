@@ -3,12 +3,11 @@
 #include "Packet/packetmanager.h"
 #include <memory>
 #include <memory>
-#include "SharedContext/sharedlock.h"
 
 namespace MyRedis{
     class TCPConnection{
     public:
-        TCPConnection(const Socket&& socket);
+        TCPConnection(Socket&& socket);
 
         // create a socket of it's own
         TCPConnection(); 

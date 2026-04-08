@@ -25,24 +25,23 @@ namespace MyRedis{
             Socket& operator=(Socket&& handle) noexcept;  // move
 
             // create a new instance of socket using the parameters passed
-            Socket(const IPEndpoint& ipendpoint, SOCKET& skt); 
+            Socket(const IPEndpoint& ipendpoint, SOCKET skt); 
             Socket(const IPEndpoint& ipendpoint); 
             Socket(const IPVersion& ipversion);
 
             void _close();
             void _listen();
             void _connect(const IPEndpoint& ipendpoint);
-            const bool _accept(Socket& handle);
-            const bool checkBound();
+            bool _accept(Socket& handle);
+            bool checkBound();
             SOCKET getSocket();
             IPVersion getIPVersion();
             void printSocketInfo();
-            ~Socket();
 
         private:
             void _bind();
-            void setSocketOptions(const SocketOption& option, BOOL value);
-            void setBlocking(const bool isBlocking);
+            bool setSocketOptions(const SocketOption& option, BOOL value);
+            bool setBlocking(const bool isBlocking);
             IPEndpoint ipendpoint{IPVersion::unknown};
             SOCKET skt = INVALID_SOCKET;
             bool isBound = false;

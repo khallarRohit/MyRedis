@@ -2,13 +2,14 @@
 #include <iostream>
 #include "Packet/packet.h"
 #include "Packet/packetmanager.h"
-#include "SharedContext/sharedlock.h"
+#include <condition_variable>
 #include <queue>
 #include <mutex>
 #include <memory>
 
 
 namespace MyRedis{
+    class ProcessJob;
 
     class InQueue{
     public:

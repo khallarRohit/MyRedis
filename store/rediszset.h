@@ -15,6 +15,8 @@ namespace MyRedis {
         // How the Red-Black tree knows how to sort them
         bool operator<(const ZSetKey& other) const;
 
+        bool operator<=(const ZSetKey& other) const;
+
         // How the Red-Black tree knows they are exactly the same
         bool operator==(const ZSetKey& other) const;
     };

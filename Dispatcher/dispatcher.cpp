@@ -2,10 +2,9 @@
 
 namespace MyRedis{
 
-    std::shared_ptr<Dispatcher> Dispatcher::dispatcher{nullptr};
 
-    std::shared_ptr<Dispatcher> Dispatcher::getInstance(){
-        static std::shared_ptr<Dispatcher> instance = std::shared_ptr<Dispatcher>(new Dispatcher());
+    Dispatcher& Dispatcher::getInstance(){
+        static Dispatcher instance;
         return instance;
     }
 

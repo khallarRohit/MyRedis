@@ -1,4 +1,5 @@
 #include "ipendpoint.h"
+#include <iostream>
 
 // ip -> NULL terminated ANSI string that contains a host (node) name or a numeric host address string.
 // For the Internet protocol, the numeric host address string is a dotted-decimal IPv4 address or an IPv6 hex address. 

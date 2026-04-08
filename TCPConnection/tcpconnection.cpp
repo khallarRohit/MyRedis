@@ -2,8 +2,8 @@
 
 namespace MyRedis{
 
-    TCPConnection::TCPConnection(const Socket&& socket)
-    :socket(std::make_unique<Socket>(socket)),
+    TCPConnection::TCPConnection(Socket&& socket)
+    :socket(std::make_unique<Socket>(std::move(socket))),
     packetManager(std::make_unique<PacketManager>())
     {}
 

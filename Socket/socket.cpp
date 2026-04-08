@@ -132,26 +132,37 @@ namespace MyRedis{
             throwWSAError("Socket/socket.cpp line:131");
         }
         
-        setBlocking(false); // tries to set the handle(SOCKET) non-blocking
+        bool res = setBlocking(false); // tries to set the handle(SOCKET) non-blocking
+        if(!res){
+            throwWSAError("Socket/socket.cpp line:131");
+        }
         
         if(version == IPVersion::IPv4){
-            setSocketOptions(SocketOption::TCP_NoDelay, TRUE);
+            res = setSocketOptions(SocketOption::TCP_NoDelay, TRUE);
         }else{
-            setSocketOptions(SocketOption::IPV6_Only, FALSE);
+            res = setSocketOptions(SocketOption::IPV6_Only, FALSE);
+        }
+
+        if(!res){
+            throwWSAError("Socket/socket.cpp line:131");
         }
     }
 
     
-    Socket::Socket(const IPEndpoint& ipendpoint, SOCKET& skt) // expects socket to be non-blocking + options set
-    :ipendpoint(ipendpoint), skt(skt){}   
+    Socket::Socket(const IPEndpoint& ipendpoint, SOCKET skt) 
+    :ipendpoint(ipendpoint), skt(skt){
+        setBlocking(false);
 
-    void Socket::setBlocking(const bool isBlocking){
+        if (ipendpoint.getIPVersion() == IPVersion::IPv4) {
+            setSocketOptions(SocketOption::TCP_NoDelay, TRUE);
+        }
+    }   
+
+    bool Socket::setBlocking(const bool isBlocking){
         unsigned long blocking = 0, nonBlocking = 1;
         int res = ioctlsocket(skt, FIONBIO, isBlocking ? &blocking : &nonBlocking);
 
-        if(res == SOCKET_ERROR){
-            throwWSAError("Socket/socket.cpp line:152");
-        }
+        return res != SOCKET_ERROR;
     }
 
     Socket::Socket(const IPVersion& ipversion)
@@ -162,12 +173,20 @@ namespace MyRedis{
             throwWSAError("Socket/socket.cpp line:161");
         }
         
-        setBlocking(false); // tries to set the handle(SOCKET) non-blocking
+        bool res = setBlocking(false); // tries to set the handle(SOCKET) non-blocking
+
+        if(!res){
+            throwWSAError("Socket/socket.cpp line:131");
+        }
         
         if(ipversion == IPVersion::IPv4){
-            setSocketOptions(SocketOption::TCP_NoDelay, TRUE);
+            res = setSocketOptions(SocketOption::TCP_NoDelay, TRUE);
         }else{
-            setSocketOptions(SocketOption::IPV6_Only, FALSE);
+            res = setSocketOptions(SocketOption::IPV6_Only, FALSE);
+        }
+
+        if(!res){
+            throwWSAError("Socket/socket.cpp line:131");
         }
     }
 
@@ -186,7 +205,7 @@ namespace MyRedis{
         return *this;
     }
 
-    void Socket::setSocketOptions(const SocketOption& option, BOOL value){
+    bool Socket::setSocketOptions(const SocketOption& option, BOOL value){
         int res = 0;
         if(option == SocketOption::TCP_NoDelay){
             res = setsockopt(skt, IPPROTO_TCP, TCP_NODELAY, (const char*)&value, sizeof(value));
@@ -194,9 +213,7 @@ namespace MyRedis{
             res = setsockopt(skt, IPPROTO_IPV6, IPV6_V6ONLY, (const char*)&value, sizeof(value));
         }
 
-        if(res == SOCKET_ERROR){
-            throwWSAError("Socket/socket.cpp line:188");
-        }
+        return res != SOCKET_ERROR;
     }
 
     void Socket::_close(){
@@ -204,12 +221,7 @@ namespace MyRedis{
             return;
         }
 
-        int res = closesocket(skt);
-
-        if(res == INVALID_SOCKET){
-            throwWSAError("Socket/socket.cpp line:200");
-        }
-
+        closesocket(skt);
         skt = INVALID_SOCKET;
     }
 
@@ -233,7 +245,7 @@ namespace MyRedis{
     }
 
 
-    const bool Socket::checkBound(){
+    bool Socket::checkBound(){
         return this->ipendpoint.getBound();
     };
 
@@ -246,7 +258,7 @@ namespace MyRedis{
         }
     }
 
-    const bool Socket::_accept(Socket& handle){
+    bool Socket::_accept(Socket& handle){
 
         const IPVersion version = this->ipendpoint.getIPVersion();
         

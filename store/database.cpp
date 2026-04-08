@@ -33,7 +33,6 @@ namespace MyRedis{
                     }
                 }
             }
-
         }    
     }
 
@@ -41,7 +40,6 @@ namespace MyRedis{
         std::unique_lock<std::shared_mutex> lock(dbMutex);
         keyspace[key] = std::make_shared<RedisString>(value);
     }
-
 
 
     // Returns std::nullopt if the key doesn't exist, is expired, or is the wrong type

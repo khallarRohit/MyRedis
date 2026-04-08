@@ -10,6 +10,8 @@
 
 namespace MyRedis{
 
+    class ProcessJob;
+
     using CommandHandler = std::function<void(std::shared_ptr<ProcessJob>)>;
 
     class Dispatcher{
@@ -19,7 +21,7 @@ namespace MyRedis{
         void registerCommand(std::string name, CommandHandler handler);
 
     public:
-        static std::shared_ptr<Dispatcher> getInstance();
+        static Dispatcher& getInstance();
 
         ~Dispatcher() = default;
 

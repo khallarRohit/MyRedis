@@ -40,7 +40,7 @@ namespace MyRedis{
 
     class OutPacket{
     public:
-        OutPacket(const std::string& data) : writeBuffer(data) {}
+        OutPacket(const std::string& data);
         ~OutPacket() = default;
         
         bool isEmpty() const;

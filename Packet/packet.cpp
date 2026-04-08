@@ -34,19 +34,32 @@ namespace MyRedis{
 
                 if(currentState == RESPState::EXPECTING_ARRAY_LEN){
                     if(line[0] == '*'){
-                        expectedElements = std::stoi(line.substr(1));
-                        currentQuery.clear();
+                        try{
+                            expectedElements = std::stoi(line.substr(1));
+                            currentQuery.clear();
 
-                        if (expectedElements == 0) {
-                            currentState = RESPState::EXPECTING_ARRAY_LEN; 
-                        } else {
-                            currentState = RESPState::EXPECTING_BULK_LEN;
+                            if (expectedElements == 0) {
+                                currentState = RESPState::EXPECTING_ARRAY_LEN; 
+                            } else {
+                                currentState = RESPState::EXPECTING_BULK_LEN;
+                            }
+                        }catch(...){
+                            readBuffer.clear();
+                            currentState = RESPState::EXPECTING_ARRAY_LEN;
+                            return;
                         }
+
                     }
                 }else if(currentState == RESPState::EXPECTING_BULK_LEN){
                     if(line[0] == '$'){
-                        currentBulkLength = std::stoi(line.substr(1));
-                        currentState = RESPState::EXPECTING_BULK_DATA;
+                        try{
+                            currentBulkLength = std::stoi(line.substr(1));
+                            currentState = RESPState::EXPECTING_BULK_DATA;
+                        }catch(...){
+                            readBuffer.clear();
+                            currentState = RESPState::EXPECTING_ARRAY_LEN;
+                            return;
+                        }
                     }
                 }
 
