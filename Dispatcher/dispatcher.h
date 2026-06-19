@@ -32,6 +32,7 @@ namespace MyRedis{
 
         void registerPING();
         void registerECHO();
+        void registerCONFIG();
 
         void registerStringCommands(std::shared_ptr<RedisDatabase> db);
         void registeHashCommands(std::shared_ptr<RedisDatabase> db);

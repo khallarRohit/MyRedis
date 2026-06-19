@@ -22,6 +22,6 @@ namespace MyRedis{
 
         void printClientInfo();        
         std::unique_ptr<Socket> socket;
-        std::unique_ptr<PacketManager> packetManager;
+        std::shared_ptr<PacketManager> packetManager = std::make_shared<PacketManager>();
     };
 }

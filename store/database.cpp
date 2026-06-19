@@ -14,22 +14,33 @@ namespace MyRedis{
         }
     }
 
-    void RedisDatabase::activeDeleteLoop(){
+    void RedisDatabase::activeDeleteLoop() {
         while (!stopExpiryThread) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            {
-                std::unique_lock<std::shared_mutex> lock(dbMutex);
+            std::unique_lock<std::shared_mutex> lock(dbMutex);
+            if (keyspace.empty()) continue;
+
+            // 1. Pick a random starting bucket
+            size_t numBuckets = keyspace.bucket_count();
+            size_t startBucket = rand() % numBuckets;
+            
+            // 2. Scan only a maximum of 20 buckets per 100ms tick
+            size_t bucketsToScan = std::min(numBuckets, (size_t)20);
+
+            for (size_t i = 0; i < bucketsToScan; ++i) {
+                size_t bucketIdx = (startBucket + i) % numBuckets;
                 
-                // Note: A true Redis instance randomly samples 20 keys with an expiry
-                // to prevent locking the DB for too long. For our scale, iterating 
-                // the whole map (or a batch) is mathematically fine.
-                
-                for (auto it = keyspace.begin(); it != keyspace.end(); ) {
+                // 3. Iterate only the items inside this specific bucket
+                for (auto it = keyspace.begin(bucketIdx); it != keyspace.end(bucketIdx); ) {
                     if (it->second->isExpired()) {
-                        it = keyspace.erase(it); 
+                        // Erase by key is the safest way to avoid invalidating 
+                        // bucket iterators in some C++ standard libraries
+                        std::string keyToDelete = it->first;
+                        it++; 
+                        keyspace.erase(keyToDelete); 
                     } else {
-                        ++it;
+                        it++;
                     }
                 }
             }

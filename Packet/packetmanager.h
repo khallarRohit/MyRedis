@@ -21,13 +21,13 @@ namespace MyRedis{
     class ProcessJob{
     public:
         std::vector<std::string> packetQuery;
-        PacketResponseManager* packetResponseManager;
+        std::shared_ptr<PacketResponseManager> packetResponseManager;
 
-        ProcessJob(std::vector<std::string> query, PacketManager* packetManager);
+        ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager);
         ~ProcessJob() = default;
     };
 
-    class PacketManager: public PacketResponseManager{
+    class PacketManager: public PacketResponseManager, public std::enable_shared_from_this<PacketManager>{
     public:
         PacketManager();
         ~PacketManager() = default;

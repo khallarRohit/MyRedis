@@ -16,7 +16,7 @@ namespace MyRedis{
     private:
         ThreadPool();
 
-        int noOfThreads = 10;
+        int noOfThreads = 1;
         std::vector<std::thread> processThreads;        
         std::shared_ptr<InQueue> inQueue;
         
@@ -25,8 +25,6 @@ namespace MyRedis{
     public:
         ThreadPool(const ThreadPool&) = delete;
         ThreadPool& operator=(const ThreadPool&) = delete;
-
-        
 
         static ThreadPool& getInstance();
         void initiate();

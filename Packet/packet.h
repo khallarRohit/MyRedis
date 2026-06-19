@@ -22,6 +22,7 @@ namespace MyRedis{
         };
 
         std::string readBuffer{""};
+        size_t readIndex{0};
         std::vector<std::string> currentQuery;
         std::queue<std::vector<std::string>> readyQueries;
 

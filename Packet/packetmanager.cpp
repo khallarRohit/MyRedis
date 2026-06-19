@@ -3,9 +3,8 @@
 
 namespace MyRedis{
 
-    ProcessJob::ProcessJob(std::vector<std::string> query, PacketManager* packetManager)
-    : packetQuery(query), packetResponseManager(packetManager){}
-
+    ProcessJob::ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager)
+    : packetQuery(std::move(query)), packetResponseManager(std::move(packetManager)){}
 
     PacketManager::PacketManager(){
         inQueue = InQueue::getInstance();
@@ -16,7 +15,7 @@ namespace MyRedis{
         inPacket->appendData(data, length);
         while (inPacket->hasReadyQueries()) {
             std::vector<std::string> query = inPacket->popNextQuery();
-            auto job = std::make_shared<ProcessJob>(query, this);
+            auto job = std::make_shared<ProcessJob>(std::move(query), shared_from_this());
             inQueue->emplace(job);
         }
     }

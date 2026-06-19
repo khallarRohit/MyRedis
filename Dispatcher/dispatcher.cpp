@@ -52,6 +52,37 @@ namespace MyRedis{
         });           
     }
 
+    void Dispatcher::registerCONFIG() {
+        registerCommand("CONFIG", [](std::shared_ptr<ProcessJob> job) {
+            const auto& args = job->packetQuery;
+            
+            // Ensure we have enough arguments e.g., ["CONFIG", "GET", "save"]
+            if (args.size() >= 3) {
+                std::string subCommand = args[1];
+                std::transform(subCommand.begin(), subCommand.end(), subCommand.begin(), ::toupper);
+                
+                std::string param = args[2];
+                std::transform(param.begin(), param.end(), param.begin(), ::tolower);
+
+                if (subCommand == "GET") {
+                    if (param == "save") {
+                        // Empty save parameter means RDB is disabled
+                        job->packetResponseManager->queueResponse("*2\r\n$4\r\nsave\r\n$0\r\n\r\n");
+                        return;
+                    } 
+                    else if (param == "appendonly") {
+                        // "no" means AOF is disabled
+                        job->packetResponseManager->queueResponse("*2\r\n$10\r\nappendonly\r\n$2\r\nno\r\n");
+                        return;
+                    }
+                }
+            }
+            
+            // Default fallback for any other CONFIG requests
+            job->packetResponseManager->queueResponse("-ERR unsupported CONFIG parameter\r\n");
+        });
+    }
+
     void Dispatcher::registerStringCommands(std::shared_ptr<RedisDatabase> db){
         registerCommand("SET", [db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;

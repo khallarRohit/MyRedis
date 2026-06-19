@@ -101,20 +101,21 @@ namespace MyRedis{
 
         dispatcher.registerPING();
         dispatcher.registerECHO();
+        dispatcher.registerCONFIG();
     }
 
     void Server::frame(int& failCount, bool& listeningSocketFailed){
         for(size_t i = 1; i < fdList.size(); i++) {
             int connIdx = i - 1;
-            if (connections[connIdx].packetManager->hasDataToSend()) {
+            if (connections[connIdx]->packetManager->hasDataToSend()) {
                 fdList[i].events |= POLLWRNORM;  // Turn ON write polling
             } else {
                 fdList[i].events &= ~POLLWRNORM; // Turn OFF write polling
             }
         }
 
-        std::vector<WSAPOLLFD> tempfdList = fdList;
-        int res = WSAPoll(tempfdList.data(), tempfdList.size(), 1000);
+        // std::vector<WSAPOLLFD> tempfdList = fdList;
+        int res = WSAPoll(fdList.data(), fdList.size(), 1);
         if(res == 0) { // no sockets were in the queried state before the timer expired.
             return;
         }else if(res == SOCKET_ERROR){ // error occured
@@ -129,7 +130,7 @@ namespace MyRedis{
             throwWSAError("Server/server.cpp line:102");
         }
 
-        WSAPOLLFD& listeningSocketWSA = tempfdList[0];
+        WSAPOLLFD& listeningSocketWSA = fdList[0];
 
         if(listeningSocketWSA.revents & POLLNVAL){
             listeningSocketFailed = true;
@@ -149,9 +150,9 @@ namespace MyRedis{
             bool res = listeningSocket._accept(newConnectionSocket);
 
             if(res){
-                connections.emplace_back(TCPConnection(std::move(newConnectionSocket)));
+                connections.push_back(std::make_unique<TCPConnection>(std::move(newConnectionSocket)));
                 std::cout << "~ New Connection Accepted" << std::endl;
-                TCPConnection& newTCPConnection = connections.back();
+                TCPConnection& newTCPConnection = *connections.back();
                 newTCPConnection.printClientInfo();
 
                 WSAPOLLFD newConnectionFd{};
@@ -165,10 +166,10 @@ namespace MyRedis{
             }
         }
 
-        for(int i=tempfdList.size()-1;i>=1;i--){
+        for(int i=fdList.size()-1;i>=1;i--){
             int connectionIndex = i-1;
-            TCPConnection& tcpConnection = connections[connectionIndex];
-            WSAPOLLFD& connectionWSA = tempfdList[i];
+            TCPConnection& tcpConnection = *connections[connectionIndex];
+            WSAPOLLFD& connectionWSA = fdList[i];
 
             if(connectionWSA.revents & POLLERR){
                 closeConnection(connectionIndex, "POLLERR");
@@ -199,22 +200,46 @@ namespace MyRedis{
                 tcpConnection.packetManager->processReceivedData(tempBuffer, bytesReceived);
             }
             
-            if(connectionWSA.revents & POLLWRNORM){ // normal data can be written without blocking 
-                if(tcpConnection.packetManager->hasDataToSend()){
+            // if(connectionWSA.revents & POLLWRNORM){ // normal data can be written without blocking 
+            //     if(tcpConnection.packetManager->hasDataToSend()){
+            //         const char* targetBuffer = tcpConnection.packetManager->getWriteBuffer();
+            //         std::optional<int32_t> targetSpaceLeft = tcpConnection.packetManager->getWriteRemainingSize();
+
+            //         if(targetBuffer != nullptr and targetSpaceLeft != std::nullopt){
+            //             int bytesSent = send(connectionWSA.fd, targetBuffer, targetSpaceLeft.value(), 0);
+            //             if(bytesSent == SOCKET_ERROR){
+            //                 if(WSAGetLastError() != WSAEWOULDBLOCK) {
+            //                     closeConnection(connectionIndex, "Send Error");
+            //                     continue;
+            //                 }              
+            //             }else if(bytesSent > 0){
+            //                 tcpConnection.packetManager->resolveWrite(bytesSent);
+            //             } 
+            //         }                   
+            //     }
+            // }
+
+            if(connectionWSA.revents & POLLWRNORM){ 
+                // Keep sending as long as we have data in the queue
+                while(tcpConnection.packetManager->hasDataToSend()){
                     const char* targetBuffer = tcpConnection.packetManager->getWriteBuffer();
                     std::optional<int32_t> targetSpaceLeft = tcpConnection.packetManager->getWriteRemainingSize();
 
-                    if(targetBuffer != nullptr and targetSpaceLeft != std::nullopt){
+                    if(targetBuffer != nullptr && targetSpaceLeft != std::nullopt){
                         int bytesSent = send(connectionWSA.fd, targetBuffer, targetSpaceLeft.value(), 0);
+                        
                         if(bytesSent == SOCKET_ERROR){
                             if(WSAGetLastError() != WSAEWOULDBLOCK) {
                                 closeConnection(connectionIndex, "Send Error");
-                                continue;
-                            }              
-                        }else if(bytesSent > 0){
+                            }
+                            // OS buffer is full, break the loop and wait for the next WSAPoll frame
+                            break; 
+                        } else if(bytesSent > 0){
                             tcpConnection.packetManager->resolveWrite(bytesSent);
                         } 
-                    }                   
+                    } else {
+                        break;
+                    }
                 }
             }
         }
@@ -222,13 +247,19 @@ namespace MyRedis{
     }
 
     void Server::closeConnection(int connectionIndex, std::string&& reason){
-        TCPConnection& connection = connections[connectionIndex];
+        TCPConnection* connection = connections[connectionIndex].get();
 
         std::cout << "[" << reason << "] Connection lost: " << std::endl;
-        connection.printClientInfo();
+        connection->printClientInfo();
 
-        fdList.erase(fdList.begin() + (connectionIndex + 1));
-        connections.erase(connections.begin() + connectionIndex);
+        int lastIndex = connections.size() - 1;
+        if(connectionIndex != lastIndex){
+            connections[connectionIndex] = std::move(connections[lastIndex]);
+            fdList[connectionIndex + 1] = fdList[lastIndex + 1];
+        }
+
+        connections.pop_back();
+        fdList.pop_back();
     }  
 
     void Server::printServerInfo(){

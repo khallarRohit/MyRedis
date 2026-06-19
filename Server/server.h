@@ -2,6 +2,8 @@
 #include <iostream>
 #include <vector>
 #include <thread>
+#include <deque>
+#include <memory>
 #include "Socket/socket.h"
 #include "Network/network.h"
 #include "TCPConnection/tcpconnection.h"
@@ -25,7 +27,7 @@ namespace MyRedis {
 
     private:
         Socket listeningSocket;
-        std::vector<TCPConnection> connections;
+        std::vector<std::unique_ptr<TCPConnection>> connections;
         std::vector<WSAPOLLFD> fdList;
         int pollFailCount{5};  
 
