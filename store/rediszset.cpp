@@ -11,7 +11,6 @@ namespace MyRedis{
         return member <= other.member; 
     }
 
-    // How the Red-Black tree knows they are exactly the same
     bool ZSetKey::operator==(const ZSetKey& other) const {
         return score == other.score && member == other.member;
     }
@@ -20,40 +19,53 @@ namespace MyRedis{
     DataType RedisZSet::getType() const { return DataType::ZSET; }
 
     // --- COMMAND: ZADD ---
-    // Adds or updates a member. Returns 1 if new, 0 if updated.
     int RedisZSet::zadd(double score, const std::string& member) {
-        double* existingScore = memberScores.find(member);
+        // UNIQUE LOCK: We must modify both structures atomically to prevent
+        // another thread from seeing them out of sync.
+        std::unique_lock<std::shared_mutex> lock(zsetMutex);
         
-        if (existingScore != nullptr) {
+        auto existingScoreOpt = memberScores.find(member);
+        
+        if (existingScoreOpt.has_value()) {
+            double existingScore = existingScoreOpt.value();
+            
             // Member already exists. If score is the same, do nothing.
-            if (*existingScore == score) return 0;
+            if (existingScore == score) return 0;
 
             // Score changed! Remove old entry from the Tree
-            orderedTree.erase({*existingScore, member});
+            orderedTree.erase({existingScore, member});
         }
 
         // Insert new data into both structures
         memberScores.insert(member, score);
         orderedTree.insert({score, member}, true);
         
-        return (existingScore == nullptr) ? 1 : 0;
+        return existingScoreOpt.has_value() ? 0 : 1;
     }
 
     // --- COMMAND: ZSCORE ---
     std::optional<double> RedisZSet::zscore(const std::string& member) const {
-        double* score = memberScores.find(member);
-        if (score != nullptr) return *score;
-        return std::nullopt;
+        // ZERO LOCKS NEEDED HERE! 
+        // We defer entirely to the blazing-fast ConcurrentHashMap.
+        return memberScores.find(member); 
+    }
+
+    // --- COMMAND: ZCARD ---
+    size_t RedisZSet::zcard() const {
+        // ZERO LOCKS NEEDED HERE! (Atomic read from the HashMap)
+        return memberScores.size();
     }
 
     // --- COMMAND: ZRANGE ---
-    std::vector<std::string> RedisZSet::zrange(int start, int stop) {
-        // Get all keys perfectly sorted from your Red-Black tree
-        std::vector<ZSetKey> sortedKeys = orderedTree.getSortedKeys();
+    std::vector<std::string> RedisZSet::zrange(int start, int stop) const {
+        // SHARED LOCK: We are reading from the RB-Tree.
+        // This allows multiple threads to run ZRANGE, ZCOUNT, and ZRANK simultaneously!
+        std::shared_lock<std::shared_mutex> lock(zsetMutex);
+        
+        std::vector<ZSetKey> sortedKeys = orderedTree.getSortedKeys(); // Need a const version of getSortedKeys in Map
         int len = sortedKeys.size();
         if (len == 0) return {};
 
-        // Handle negative indices (e.g., -1 is the last element)
         if (start < 0) start = len + start;
         if (stop < 0) stop = len + stop;
 
@@ -62,17 +74,17 @@ namespace MyRedis{
         if (stop >= len) stop = len - 1;
 
         std::vector<std::string> result;
+        result.reserve(stop - start + 1);
         for (int i = start; i <= stop; i++) {
             result.push_back(sortedKeys[i].member);
         }
         return result;
     }
 
-    size_t RedisZSet::zcard() const {
-        return memberScores.size();
-    }
-
-    size_t RedisZSet::zcount(double min, double max) {
+    // --- COMMAND: ZCOUNT ---
+    size_t RedisZSet::zcount(double min, double max) const {
+        std::shared_lock<std::shared_mutex> lock(zsetMutex);
+        
         std::vector<ZSetKey> sortedKeys = orderedTree.getSortedKeys();
         size_t count = 0;
         for (const auto& key : sortedKeys) {
@@ -83,11 +95,15 @@ namespace MyRedis{
         return count;
     }
 
-    std::optional<int> RedisZSet::zrank(const std::string& member) {
-        // O(1) check to see if it even exists before traversing the tree
-        double* scorePtr = memberScores.find(member);
-        if (scorePtr == nullptr) return std::nullopt;
+    // --- COMMAND: ZRANK ---
+    std::optional<int> RedisZSet::zrank(const std::string& member) const {
+        // O(1) lock-free check to see if it even exists before locking the tree
+        if (!memberScores.find(member).has_value()) {
+            return std::nullopt;
+        }
 
+        std::shared_lock<std::shared_mutex> lock(zsetMutex);
+        
         std::vector<ZSetKey> sortedKeys = orderedTree.getSortedKeys();
         for (size_t i = 0; i < sortedKeys.size(); i++) {
             if (sortedKeys[i].member == member) {
@@ -96,6 +112,4 @@ namespace MyRedis{
         }
         return std::nullopt;
     }
-
 }
-        

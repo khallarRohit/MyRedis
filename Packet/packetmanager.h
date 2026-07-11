@@ -4,6 +4,7 @@
 #include <queue>
 #include <memory>
 #include <optional>
+#include <atomic>
 #include <mutex>
 
 
@@ -12,18 +13,28 @@ namespace MyRedis{
     class PacketManager;
     class InQueue;
 
+    struct QueuedResponse {
+        uint64_t ticket;
+        std::string data;
+        
+        bool operator>(const QueuedResponse& other) const {
+            return ticket > other.ticket;
+        }
+    };
+
     class PacketResponseManager{
     public:
         virtual ~PacketResponseManager() = default;
-        virtual void queueResponse(const std::string& responseStr) = 0;
+        virtual void pushOrderedResponse(uint64_t ticket, const std::string& responseStr) = 0;
     };
 
     class ProcessJob{
     public:
         std::vector<std::string> packetQuery;
         std::shared_ptr<PacketResponseManager> packetResponseManager;
+        uint64_t ticket;
 
-        ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager);
+        ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager, uint64_t ticket);
         ~ProcessJob() = default;
     };
 
@@ -40,7 +51,7 @@ namespace MyRedis{
         void createInPacket();
 
         // write methods
-        void queueResponse(const std::string& responseStr) override;
+        void pushOrderedResponse(uint64_t ticket, const std::string& responseStr) override;
         bool hasDataToSend() const;
         const char* getWriteBuffer() const;
         std::optional<uint32_t> getWriteRemainingSize() const;
@@ -54,6 +65,11 @@ namespace MyRedis{
         // write state variables
         mutable std::mutex writeMutex;
         std::queue<std::shared_ptr<OutPacket>> outQueue;
+
+        // Per-Client Sequencing State 
+        std::atomic<uint64_t> issue_seq{0};
+        uint64_t next_ticket_to_send{0};
+        std::priority_queue<QueuedResponse, std::vector<QueuedResponse>, std::greater<QueuedResponse>> response_pq;
     };
 
 }

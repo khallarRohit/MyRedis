@@ -17,8 +17,7 @@ namespace MyRedis{
 
     class RedisDatabase{
     private:
-        std::unordered_map<std::string, std::shared_ptr<RedisObject>> keyspace;
-        mutable std::shared_mutex dbMutex;
+        HashMap<std::string, std::shared_ptr<RedisObject>> keyspace;
 
         std::thread expiryThread;
         std::atomic<bool> stopExpiryThread{false};
@@ -27,6 +26,8 @@ namespace MyRedis{
     public:
         RedisDatabase();
         ~RedisDatabase();
+
+        uint64_t getVersion(const std::string& key);
 
         // String
         void set(const std::string& key, const std::string& value);

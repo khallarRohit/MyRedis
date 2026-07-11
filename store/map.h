@@ -52,7 +52,7 @@ public:
     V& operator[](const K& key); // access, insert, update
     V& at(const K& key); // access with bound check(throw if not found)
     const V& at(const K& key) const; // const version of at()
-    std::vector<K> getSortedKeys();
+    std::vector<K> getSortedKeys() const;
 
     size_t size();
     bool empty();

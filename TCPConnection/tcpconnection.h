@@ -5,6 +5,7 @@
 #include <memory>
 
 namespace MyRedis{
+
     class TCPConnection{
     public:
         TCPConnection(Socket&& socket);
@@ -20,7 +21,8 @@ namespace MyRedis{
         TCPConnection(TCPConnection&&) noexcept = default;
         TCPConnection& operator=(TCPConnection&&) noexcept = default;
 
-        void printClientInfo();        
+        void printClientInfo(); 
+
         std::unique_ptr<Socket> socket;
         std::shared_ptr<PacketManager> packetManager = std::make_shared<PacketManager>();
     };

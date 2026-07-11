@@ -3,13 +3,36 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <shared_mutex>
+#include <mutex>
+#include <memory>
+#include <atomic>
 #include <optional>
 
 namespace MyRedis{
 
     class RedisList : public RedisObject{
     private:
-        std::deque<std::string> internalList;
+        static constexpr size_t BLOCK_CAPACITY = 512;
+
+        struct ListBlock {
+            std::deque<std::string> elements;
+            mutable std::shared_mutex blockMutex;
+            
+            std::shared_ptr<ListBlock> next{nullptr};
+            std::weak_ptr<ListBlock> prev; 
+            
+            ListBlock() = default;
+        };
+
+        std::shared_ptr<ListBlock> head;
+        std::shared_ptr<ListBlock> tail;
+        
+        // Protects structural changes (adding/removing blocks)
+        mutable std::shared_mutex listMutex; 
+        
+        // Atomic counter for O(1) LLEN commands
+        std::atomic<size_t> list_size{0};
 
     public:
         RedisList() = default;

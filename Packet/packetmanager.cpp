@@ -3,8 +3,8 @@
 
 namespace MyRedis{
 
-    ProcessJob::ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager)
-    : packetQuery(std::move(query)), packetResponseManager(std::move(packetManager)){}
+    ProcessJob::ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager, uint64_t ticket)
+    : packetQuery(std::move(query)), packetResponseManager(std::move(packetManager)), ticket(ticket){}
 
     PacketManager::PacketManager(){
         inQueue = InQueue::getInstance();
@@ -15,8 +15,25 @@ namespace MyRedis{
         inPacket->appendData(data, length);
         while (inPacket->hasReadyQueries()) {
             std::vector<std::string> query = inPacket->popNextQuery();
-            auto job = std::make_shared<ProcessJob>(std::move(query), shared_from_this());
+
+            uint64_t ticket = issue_seq.fetch_add(1, std::memory_order_relaxed);
+
+            auto job = std::make_shared<ProcessJob>(std::move(query), shared_from_this(), ticket);
             inQueue->emplace(job);
+        }
+    }
+
+    void PacketManager::pushOrderedResponse(uint64_t ticket, const std::string& responseStr) {
+        std::lock_guard<std::mutex> lock(writeMutex);
+        
+        // 2. Push to the client's min-heap
+        response_pq.push({ticket, responseStr});
+
+        // 3. Drain the min-heap into the actual outgoing TCP queue
+        while (!response_pq.empty() && response_pq.top().ticket == next_ticket_to_send) {
+            outQueue.push(std::make_shared<OutPacket>(response_pq.top().data));
+            response_pq.pop();
+            next_ticket_to_send++;
         }
     }
 
@@ -25,10 +42,6 @@ namespace MyRedis{
         inPacket = std::make_shared<InPacket>(); 
     }
 
-    void PacketManager::queueResponse(const std::string& responseStr){
-        std::lock_guard<std::mutex> lock(writeMutex);
-        outQueue.push(std::make_shared<OutPacket>(responseStr));
-    }
 
     bool PacketManager::hasDataToSend() const{
         std::lock_guard<std::mutex> lock(writeMutex);

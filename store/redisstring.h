@@ -1,10 +1,13 @@
+#pragma once
 #include "object.h"
+#include <atomic>
+#include <memory>
 
 namespace MyRedis{
 
     class RedisString : public RedisObject{
     private:
-        std::string value{};
+        std::atomic<std::shared_ptr<const std::string>> value_ptr;
     public:
         RedisString(const std::string& val);
         ~RedisString() override = default;

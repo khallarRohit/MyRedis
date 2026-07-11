@@ -18,9 +18,6 @@ Node<K,V>::Node()
 
 
 
-
-
-
 /**********************************PRIVATE MAP FUNCTIONS****************************************/
 
 template<class K,class V>
@@ -354,7 +351,7 @@ void Map<K,V>::clear(){
 }
 
 template<class K, class V>
-std::vector<K> Map<K,V>::getSortedKeys() {
+std::vector<K> Map<K,V>::getSortedKeys() const{
     std::vector<K> result;
     inorder(root, null, result);
     return result;
