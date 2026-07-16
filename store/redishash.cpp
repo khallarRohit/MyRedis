@@ -6,28 +6,22 @@ namespace MyRedis{
     }
 
     int RedisHash::hset(const std::string& field, const std::string& value) {
-        // Create the new atomic wrapper right away
         auto new_val = std::make_shared<AtomicValue>(value);
         
-        // Single traversal! If it exists, the map returns the existing shared_ptr safely.
         auto [existing_opt, inserted] = internalMap.insert(field, new_val);
         
         if (!inserted && existing_opt.has_value()) {
-            // --- FAST PATH OVERRIDE ---
-            // The key already existed. The map did NOT overwrite the shared_ptr (which would be unsafe).
-            // We use the returned shared_ptr to perform the lock-free RCU update natively.
             auto new_str_ptr = std::make_shared<const std::string>(value);
             existing_opt.value()->ptr.store(new_str_ptr, std::memory_order_release);
-            return 0; // 0 indicates an existing field was updated
+            return 0;
         }
         
-        return 1; // 1 indicates a brand new field was inserted
+        return 1;
     }
 
     std::optional<std::string> RedisHash::hget(const std::string& field) const {
         auto valOpt = internalMap.find(field);
         if (valOpt.has_value()) {
-            // Safely read the string pointer out of the atomic wrapper
             auto str_ptr = valOpt.value()->ptr.load(std::memory_order_acquire);
             return *str_ptr;
         }
@@ -49,7 +43,6 @@ namespace MyRedis{
     std::optional<std::string> RedisHash::hgetdel(const std::string& field) {
         auto valOpt = internalMap.find(field);
         if (valOpt.has_value()) {
-            // Extract the string before the node gets deleted
             auto str_ptr = valOpt.value()->ptr.load(std::memory_order_acquire);
             std::string valueCopy = *str_ptr; 
             

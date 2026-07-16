@@ -32,10 +32,21 @@ namespace MyRedis{
     public:
         std::vector<std::string> packetQuery;
         std::shared_ptr<PacketResponseManager> packetResponseManager;
-        uint64_t ticket;
+        uint64_t ticket{};
+        bool isAofRecovery{false};
 
         ProcessJob(std::vector<std::string> query, std::shared_ptr<PacketResponseManager> packetManager, uint64_t ticket);
         ~ProcessJob() = default;
+
+        void sendReply(const std::string& reply) {
+            if (isAofRecovery) {
+                return; 
+            }
+
+            if (packetResponseManager) {
+                packetResponseManager->pushOrderedResponse(ticket, reply); 
+            }
+        }
     };
 
     class PacketManager: public PacketResponseManager, public std::enable_shared_from_this<PacketManager>{
@@ -64,6 +75,7 @@ namespace MyRedis{
 
         // write state variables
         mutable std::mutex writeMutex;
+        std::atomic<int> outQueueSize{0};
         std::queue<std::shared_ptr<OutPacket>> outQueue;
 
         // Per-Client Sequencing State 

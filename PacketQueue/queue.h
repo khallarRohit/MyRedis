@@ -18,6 +18,7 @@ namespace MyRedis{
 
         static std::shared_ptr<InQueue> getInstance();
 
+        void emplaceBulk(std::vector<std::shared_ptr<ProcessJob>>& jobs);
         void emplace(std::shared_ptr<ProcessJob> job);
         std::shared_ptr<ProcessJob> pop();
         void shutdown();

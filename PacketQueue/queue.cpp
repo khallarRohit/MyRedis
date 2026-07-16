@@ -8,9 +8,24 @@ namespace MyRedis{
     }
 
     void InQueue::emplace(std::shared_ptr<ProcessJob> job){
-        std::lock_guard<std::mutex> lock(queue_mtx);
-        queue.push(std::move(job));
+        {
+            std::lock_guard<std::mutex> lock(queue_mtx);
+            queue.push(std::move(job));
+        }
         queue_cv.notify_one();
+    }
+
+    void InQueue::emplaceBulk(std::vector<std::shared_ptr<ProcessJob>>& jobs){
+        if (jobs.empty()) return;
+
+        {
+            std::lock_guard<std::mutex> lock(queue_mtx);
+            for (auto& job : jobs) {
+                queue.push(std::move(job));
+            }
+        } 
+
+        queue_cv.notify_all(); 
     }
 
     std::shared_ptr<ProcessJob> InQueue::pop(){
@@ -25,6 +40,7 @@ namespace MyRedis{
 
         auto job = std::move(queue.front());
         queue.pop();
+        
         return job;
     }
     

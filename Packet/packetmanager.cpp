@@ -13,27 +13,24 @@ namespace MyRedis{
 
     void PacketManager::processReceivedData(const char* data, int length) {
         inPacket->appendData(data, length);
+
         while (inPacket->hasReadyQueries()) {
-            std::vector<std::string> query = inPacket->popNextQuery();
-
             uint64_t ticket = issue_seq.fetch_add(1, std::memory_order_relaxed);
-
-            auto job = std::make_shared<ProcessJob>(std::move(query), shared_from_this(), ticket);
-            inQueue->emplace(job);
+            inQueue->emplace(std::make_shared<ProcessJob>(inPacket->popNextQuery(), shared_from_this(), ticket));
         }
     }
 
     void PacketManager::pushOrderedResponse(uint64_t ticket, const std::string& responseStr) {
         std::lock_guard<std::mutex> lock(writeMutex);
         
-        // 2. Push to the client's min-heap
         response_pq.push({ticket, responseStr});
 
-        // 3. Drain the min-heap into the actual outgoing TCP queue
         while (!response_pq.empty() && response_pq.top().ticket == next_ticket_to_send) {
             outQueue.push(std::make_shared<OutPacket>(response_pq.top().data));
             response_pq.pop();
             next_ticket_to_send++;
+
+            outQueueSize.fetch_add(1, std::memory_order_relaxed);
         }
     }
 
@@ -42,10 +39,8 @@ namespace MyRedis{
         inPacket = std::make_shared<InPacket>(); 
     }
 
-
     bool PacketManager::hasDataToSend() const{
-        std::lock_guard<std::mutex> lock(writeMutex);
-        return !outQueue.empty();
+        return outQueueSize.load(std::memory_order_relaxed) > 0;
     }
 
     const char* PacketManager::getWriteBuffer() const{
@@ -75,6 +70,7 @@ namespace MyRedis{
         outQueue.front()->resolveWrite(bytesSent);
         if(outQueue.front()->isEmpty()){
             outQueue.pop();
+            outQueueSize.fetch_sub(1, std::memory_order_relaxed);
         }
     }
 

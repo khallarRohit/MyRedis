@@ -265,7 +265,7 @@ void Map<K,V>::copyTree(Node<K,V>*& thisNode, Node<K,V>* otherNode, Node<K,V>* p
 }
 
 template<class K,class V>
-void Map<K,V>::inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result){
+void Map<K,V>::inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result) const{  
     if (node != nullNode) {
         inorder(node->left, nullNode, result);
         result.push_back(node->key);

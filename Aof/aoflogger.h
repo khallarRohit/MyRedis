@@ -13,11 +13,12 @@ namespace MyRedis {
     private:
         std::vector<std::string> frontBuffer;
         std::vector<std::string> backBuffer;
+
+        std::thread writerThread;
         
         std::mutex mtx;
         std::condition_variable cv;
         std::atomic<bool> stopFlag{false};
-        std::thread writerThread;
         
         std::string filePath;
         
@@ -31,7 +32,6 @@ namespace MyRedis {
         AofLogger(const AofLogger&) = delete;
         AofLogger& operator=(const AofLogger&) = delete;
 
-        // Called by your worker threads to log a mutating command
         void logCommand(const std::string& rawRespCommand);
     };
 

@@ -18,81 +18,10 @@ namespace MyRedis{
         return nextQuery;
     }
 
-    // void InPacket::appendData(const char* data, int length){
-    //     readBuffer.append(data, length);
-
-    //     while(!readBuffer.empty()){
-    //         if(currentState == RESPState::EXPECTING_ARRAY_LEN
-    //         or currentState == RESPState::EXPECTING_BULK_LEN){
-    //             size_t crlfPos = readBuffer.find("\r\n");
-    //             if (crlfPos == std::string::npos) {
-    //                 return;
-    //             }
-
-    //             std::string line = readBuffer.substr(0, crlfPos);
-    //             readBuffer.erase(0, crlfPos + 2);
-
-    //             if(currentState == RESPState::EXPECTING_ARRAY_LEN){
-    //                 if(line[0] == '*'){
-    //                     try{
-    //                         expectedElements = std::stoi(line.substr(1));
-    //                         currentQuery.clear();
-
-    //                         if (expectedElements == 0) {
-    //                             currentState = RESPState::EXPECTING_ARRAY_LEN; 
-    //                         } else {
-    //                             currentState = RESPState::EXPECTING_BULK_LEN;
-    //                         }
-    //                     }catch(...){
-    //                         readBuffer.clear();
-    //                         currentState = RESPState::EXPECTING_ARRAY_LEN;
-    //                         return;
-    //                     }
-
-    //                 }
-    //             }else if(currentState == RESPState::EXPECTING_BULK_LEN){
-    //                 if(line[0] == '$'){
-    //                     try{
-    //                         currentBulkLength = std::stoi(line.substr(1));
-    //                         currentState = RESPState::EXPECTING_BULK_DATA;
-    //                     }catch(...){
-    //                         readBuffer.clear();
-    //                         currentState = RESPState::EXPECTING_ARRAY_LEN;
-    //                         return;
-    //                     }
-    //                 }
-    //             }
-
-    //         }else if(currentState == RESPState::EXPECTING_BULK_DATA){
-    //             int totalRequiredBytes = currentBulkLength + 2;
-    //             if(readBuffer.length() < totalRequiredBytes){
-    //                 return;
-    //             }
-
-    //             std::string argument = readBuffer.substr(0, currentBulkLength);
-    //             currentQuery.push_back(argument);
-    //             readBuffer.erase(0, totalRequiredBytes);
-
-    //             if(currentQuery.size() == expectedElements){
-
-    //                 readyQueries.push(currentQuery);
-    //                 currentQuery.clear();
-
-    //                 currentState = RESPState::EXPECTING_ARRAY_LEN;
-    //                 expectedElements = 0;
-    //             }else{
-    //                 currentState = RESPState::EXPECTING_BULK_LEN;
-    //             }
-    //         }
-
-    //     }
-    // }
-
     void InPacket::appendData(const char* data, int length) {
         // 1. Append new bytes to the end of the buffer
         readBuffer.append(data, length);
 
-        // 2. Process bytes starting from where we left off last time
         while (readIndex < readBuffer.length()) {
             
             if (currentState == RESPState::EXPECTING_ARRAY_LEN || 
@@ -101,51 +30,45 @@ namespace MyRedis{
                 // Search only in the unparsed portion of the buffer
                 size_t crlfPos = readBuffer.find("\r\n", readIndex);
                 if (crlfPos == std::string::npos) {
-                    break; // Incomplete line, wait for more data
+                    break; // Incomplete data
                 }
 
-                // Extract the line string using string_view or substr without modifying the main buffer
-                std::string line = readBuffer.substr(readIndex, crlfPos - readIndex);
-                
-                // Move the cursor forward past the line and the "\r\n"
+                std::string_view line = readBuffer.substr(readIndex, crlfPos - readIndex);
                 readIndex = crlfPos + 2;
 
                 if (currentState == RESPState::EXPECTING_ARRAY_LEN) {
                     if (!line.empty() && line[0] == '*') {
-                        try {
-                            expectedElements = std::stoi(line.substr(1));
-                            currentQuery.clear();
-
-                            if (expectedElements == 0) {
-                                currentState = RESPState::EXPECTING_ARRAY_LEN;
-                            } else {
-                                currentState = RESPState::EXPECTING_BULK_LEN;
-                            }
-                        } catch (...) {
-                            readBuffer.clear();
-                            readIndex = 0;
-                            currentState = RESPState::EXPECTING_ARRAY_LEN;
-                            return;
+                        auto [ptr, ec] = std::from_chars(line.data() + 1, line.data() + line.size(), expectedElements);
+                        
+                        if (ec != std::errc() || expectedElements < 0) {
+                            throw ProtocolException("Invalid array length");
                         }
+
+                        currentQuery.clear();
+                        if (expectedElements == 0) {
+                            currentState = RESPState::EXPECTING_ARRAY_LEN;
+                        } else {
+                            currentState = RESPState::EXPECTING_BULK_LEN;
+                        }
+                    } else {
+                        throw ProtocolException("Expected '*' for array length");
                     }
                 } else if (currentState == RESPState::EXPECTING_BULK_LEN) {
                     if (!line.empty() && line[0] == '$') {
-                        try {
-                            currentBulkLength = std::stoi(line.substr(1));
-                            currentState = RESPState::EXPECTING_BULK_DATA;
-                        } catch (...) {
-                            readBuffer.clear();
-                            readIndex = 0;
-                            currentState = RESPState::EXPECTING_ARRAY_LEN;
-                            return;
+                        auto [ptr, ec] = std::from_chars(line.data() + 1, line.data() + line.size(), currentBulkLength);
+                        
+                        if (ec != std::errc() || currentBulkLength < 0) {
+                            throw ProtocolException("Invalid bulk string length");
                         }
+                        currentState = RESPState::EXPECTING_BULK_DATA;
+                    } else {
+                        throw ProtocolException("Expected '$' for bulk string length");
                     }
                 }
 
             } else if (currentState == RESPState::EXPECTING_BULK_DATA) {
                 int totalRequiredBytes = currentBulkLength + 2; // Data length + \r\n
                 
-                // Check if enough bytes are left in the unparsed portion
                 if ((readBuffer.length() - readIndex) < static_cast<size_t>(totalRequiredBytes)) {
                     break; // Incomplete bulk data, wait for next network frame
                 }
@@ -153,7 +76,6 @@ namespace MyRedis{
                 std::string argument = readBuffer.substr(readIndex, currentBulkLength);
                 currentQuery.push_back(argument);
                 
-                // Advance the cursor past the payload and trailing \r\n
                 readIndex += totalRequiredBytes;
 
                 if (currentQuery.size() == expectedElements) {
@@ -168,10 +90,15 @@ namespace MyRedis{
             }
         }
 
-        // 3. Maintenance: Erase fully consumed chunks to prevent unbounded memory growth
         if (readIndex > 0) {
-            readBuffer.erase(0, readIndex);
-            readIndex = 0; // Reset cursor back to the new front
+            if (readIndex == readBuffer.length()) {
+                readBuffer.clear();
+                readIndex = 0;
+            } else if (readIndex > 16384) { 
+                // Threshold hit (16KB). 
+                readBuffer.erase(0, readIndex);
+                readIndex = 0; 
+            }
         }
     }
 

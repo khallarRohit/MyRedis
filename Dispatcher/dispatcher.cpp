@@ -13,6 +13,18 @@ namespace MyRedis{
         registry[name] = handler;
     }
 
+    void Dispatcher::setAofLogger(std::shared_ptr<AofLogger> logger) {
+        this->aofLogger = logger;
+    }
+
+    std::string Dispatcher::reconstructRESP(const std::vector<std::string>& args) {
+        std::string resp = "*" + std::to_string(args.size()) + "\r\n";
+        for (const auto& arg : args) {
+            resp += "$" + std::to_string(arg.length()) + "\r\n" + arg + "\r\n";
+        }
+        return resp;
+    }
+
     void Dispatcher::dispatch(std::shared_ptr<ProcessJob> job){
         if(job->packetQuery.empty()){
             return;
@@ -25,18 +37,17 @@ namespace MyRedis{
         if(it != registry.end()){
             it->second(job);
         }else{
-            // need an outpacket constructor
-            job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR unknown command '" + commandName + "'\r\n");
+            job->sendReply("-ERR unknown command '" + commandName + "'\r\n");
         }
     }
 
     void Dispatcher::registerPING(){
         registerCommand("PING", [](std::shared_ptr<ProcessJob> job){
             if(job->packetQuery.size() == 1){
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "+PONG\r\n");
+                job->sendReply( "+PONG\r\n");
             }else{
                 std::string response = "$" + std::to_string(job->packetQuery[1].length()) + "\r\n" + job->packetQuery[1] + "\r\n";
-                job->packetResponseManager->pushOrderedResponse(job->ticket, response);
+                job->sendReply( response);
             }
         });
     }
@@ -45,9 +56,9 @@ namespace MyRedis{
         registerCommand("ECHO", [](std::shared_ptr<ProcessJob> job){
             if(job->packetQuery.size() >= 2){
                 std::string response = "$" + std::to_string(job->packetQuery[1].length()) + "\r\n" + job->packetQuery[1] + "\r\n";
-                job->packetResponseManager->pushOrderedResponse(job->ticket, response);
+                job->sendReply( response);
             }else{
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'echo' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'echo' command\r\n");
             }
         });           
     }
@@ -67,30 +78,33 @@ namespace MyRedis{
                 if (subCommand == "GET") {
                     if (param == "save") {
                         // Empty save parameter means RDB is disabled
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "*2\r\n$4\r\nsave\r\n$0\r\n\r\n");
+                        job->sendReply( "*2\r\n$4\r\nsave\r\n$0\r\n\r\n");
                         return;
                     } 
                     else if (param == "appendonly") {
                         // "no" means AOF is disabled
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "*2\r\n$10\r\nappendonly\r\n$2\r\nno\r\n");
+                        job->sendReply( "*2\r\n$10\r\nappendonly\r\n$2\r\nno\r\n");
                         return;
                     }
                 }
             }
             
-            // Default fallback for any other CONFIG requests
-            job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR unsupported CONFIG parameter\r\n");
+            job->sendReply( "-ERR unsupported CONFIG parameter\r\n");
         });
     }
 
     void Dispatcher::registerStringCommands(std::shared_ptr<RedisDatabase> db){
-        registerCommand("SET", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("SET", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 db->set(args[1], args[2]);
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "+OK\r\n");
+                job->sendReply( "+OK\r\n");
+
+                if (this->aofLogger) {
+                    this->aofLogger->logCommand(this->reconstructRESP(args));
+                }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR syntax error or wrong number of arguments\r\n");
+                job->sendReply( "-ERR syntax error or wrong number of arguments\r\n");
             }
         });
 
@@ -99,31 +113,35 @@ namespace MyRedis{
             if (args.size() == 2) {
                 auto strObj = db->get(args[1]);
                 if (strObj == nullptr) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n");
+                    job->sendReply( "$-1\r\n");
                 } else {
                     std::string val = strObj->get();
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n");
+                    job->sendReply( "$" + std::to_string(val.length()) + "\r\n" + val + "\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'get' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'get' command\r\n");
             }
         });
 
-        registerCommand("GETSET", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("GETSET", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
                     auto oldVal = db->getset(args[1], args[2]);
                     if (oldVal.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(oldVal.value().length()) + "\r\n" + oldVal.value() + "\r\n");
+                        job->sendReply( "$" + std::to_string(oldVal.value().length()) + "\r\n" + oldVal.value() + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n");
+                        job->sendReply( "$-1\r\n");
+                    }
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
@@ -135,23 +153,22 @@ namespace MyRedis{
                     int stop = std::stoi(args[3]);
                     
                     std::string result = db->substr(args[1], start, stop);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(result.length()) + "\r\n" + result + "\r\n");
+                    job->sendReply( "$" + std::to_string(result.length()) + "\r\n" + result + "\r\n");
                     
                 } catch (const std::invalid_argument& e) {
                     if (std::string(e.what()) == "WRONGTYPE") {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                        job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR value is not an integer or out of range\r\n");
+                        job->sendReply( "-ERR value is not an integer or out of range\r\n");
                     }
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'substr' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'substr' command\r\n");
             }
         });
 
-        registerCommand("MSET", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("MSET", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
-            // Total arguments must be odd: 1 for "MSET" + pairs of 2
             if (args.size() >= 3 && args.size() % 2 != 0) {
                 std::vector<std::pair<std::string, std::string>> keyValues;
                 for (size_t i = 1; i < args.size(); i += 2) {
@@ -159,9 +176,13 @@ namespace MyRedis{
                 }
                 
                 db->mset(keyValues);
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "+OK\r\n");
+                job->sendReply( "+OK\r\n");
+
+                if (this->aofLogger) {
+                    this->aofLogger->logCommand(this->reconstructRESP(args));
+                }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'mset' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'mset' command\r\n");
             }
         });
 
@@ -181,25 +202,29 @@ namespace MyRedis{
                         response += "$-1\r\n"; // Nil response for missing/wrong-type keys
                     }
                 }
-                job->packetResponseManager->pushOrderedResponse(job->ticket, response);
+                job->sendReply( response);
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'mget' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'mget' command\r\n");
             }
         });
     }
 
     void Dispatcher::registeHashCommands(std::shared_ptr<RedisDatabase> db){
-        registerCommand("HSET", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HSET", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 4) {
                 try {
                     db->hset(args[1], args[2], args[3]);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "+OK\r\n");
+                    job->sendReply( "+OK\r\n");
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                }
+
+                if (this->aofLogger) {
+                    this->aofLogger->logCommand(this->reconstructRESP(args));
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
@@ -209,33 +234,36 @@ namespace MyRedis{
                 try {
                     auto result = db->hget(args[1], args[2]);
                     if (result.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
+                        job->sendReply( "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n");
+                        job->sendReply( "$-1\r\n");
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
         
         // COMMAND: HDEL key field
-        registerCommand("HDEL", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HDEL", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
                     size_t removed = db->hdel(args[1], args[2]);
                     
                     // Redis integer reply format: :<number>\r\n
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(removed) + "\r\n");
-                    
+                    job->sendReply( ":" + std::to_string(removed) + "\r\n");
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (const std::invalid_argument& e) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'hdel' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'hdel' command\r\n");
             }
         });
 
@@ -246,12 +274,12 @@ namespace MyRedis{
                 try {
                     auto result = db->hexists(args[1], args[2]);
                     int exists = result.value_or(0); // If key doesn't exist, return 0
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(exists) + "\r\n");
+                    job->sendReply( ":" + std::to_string(exists) + "\r\n");
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'hexists' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'hexists' command\r\n");
             }
         });
 
@@ -262,116 +290,140 @@ namespace MyRedis{
                 try {
                     auto result = db->hlen(args[1]);
                     size_t len = result.value_or(0); // If key doesn't exist, length is 0
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(len) + "\r\n");
+                    job->sendReply( ":" + std::to_string(len) + "\r\n");
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'hlen' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'hlen' command\r\n");
             }
         });
 
         // COMMAND: HGETDEL key field
-        registerCommand("HGETDEL", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("HGETDEL", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 3) {
                 try {
                     auto result = db->hgetdel(args[1], args[2]);
                     if (result.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
+                        job->sendReply( "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n"); // Field or Key didn't exist
+                        job->sendReply( "$-1\r\n"); // Field or Key didn't exist
+                    }
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'hgetdel' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'hgetdel' command\r\n");
             }
         });
     }
 
     void Dispatcher::registeListCommands(std::shared_ptr<RedisDatabase> db){
-        registerCommand("LPUSH", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("LPUSH", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() >= 3) {
                 try {
                     std::vector<std::string> elements(args.begin() + 2, args.end());
                     int newLen = db->lpush(args[1], elements);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(newLen) + "\r\n");
+                    job->sendReply( ":" + std::to_string(newLen) + "\r\n");
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
-        registerCommand("LPOP", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("LPOP", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 2) {
                 try {
                     auto result = db->lpop(args[1]);
                     if (result.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
+                        job->sendReply( "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n");
+                        job->sendReply( "$-1\r\n");
+                    }
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
     
-        registerCommand("RPUSH", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("RPUSH", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() >= 3) {
                 try {
                     std::vector<std::string> elements(args.begin() + 2, args.end());
                     int newLength = db->rpush(args[1], elements);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(newLength) + "\r\n");
+                    job->sendReply( ":" + std::to_string(newLength) + "\r\n");
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (const std::invalid_argument& e) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'rpush' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'rpush' command\r\n");
             }
         });
 
-        registerCommand("RPOP", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("RPOP", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 2) {
                 try {
                     auto result = db->rpop(args[1]);
                     if (result.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
+                        job->sendReply( "$" + std::to_string(result.value().length()) + "\r\n" + result.value() + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n"); // Key didn't exist or list was empty
+                        job->sendReply( "$-1\r\n"); // Key didn't exist or list was empty
+                    }
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
                     }
                 } catch (const std::invalid_argument& e) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'rpop' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'rpop' command\r\n");
             }
         });
     }
 
     void Dispatcher::registeSetCommands(std::shared_ptr<RedisDatabase> db){
-        registerCommand("SADD", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("SADD", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() >= 3) {
                 try {
                     std::vector<std::string> members(args.begin() + 2, args.end());
                     int added = db->sadd(args[1], members);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(added) + "\r\n");
+                    job->sendReply( ":" + std::to_string(added) + "\r\n");
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
@@ -380,12 +432,12 @@ namespace MyRedis{
             if (args.size() == 3) {
                 try {
                     auto exists = db->sismember(args[1], args[2]);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(exists.value_or(0)) + "\r\n");
+                    job->sendReply( ":" + std::to_string(exists.value_or(0)) + "\r\n");
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
@@ -395,17 +447,17 @@ namespace MyRedis{
             if (args.size() == 2) {
                 try {
                     size_t count = db->scard(args[1]);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(count) + "\r\n");
+                    job->sendReply( ":" + std::to_string(count) + "\r\n");
                 } catch (const std::invalid_argument& e) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'scard' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'scard' command\r\n");
             }
         });
 
         // COMMAND: SREM key member [member ...]
-        registerCommand("SREM", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("SREM", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() >= 3) {
                 try {
@@ -413,33 +465,41 @@ namespace MyRedis{
                     std::vector<std::string> members(args.begin() + 2, args.end());
                     
                     int removed = db->srem(args[1], members);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(removed) + "\r\n");
+                    job->sendReply( ":" + std::to_string(removed) + "\r\n");
+
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (const std::invalid_argument& e) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'srem' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'srem' command\r\n");
             }
         });
     }
 
     void Dispatcher::registeZSetCommands(std::shared_ptr<RedisDatabase> db){
-        registerCommand("ZADD", [db](std::shared_ptr<ProcessJob> job) {
+        registerCommand("ZADD", [this, db](std::shared_ptr<ProcessJob> job) {
             const auto& args = job->packetQuery;
             if (args.size() == 4) {
                 try {
                     double score = std::stod(args[2]);
                     int added = db->zadd(args[1], score, args[3]);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(added) + "\r\n");
+                    job->sendReply( ":" + std::to_string(added) + "\r\n");
+        
+                    if (this->aofLogger) {
+                        this->aofLogger->logCommand(this->reconstructRESP(args));
+                    }
                 } catch (const std::invalid_argument& e) {
                     if (std::string(e.what()) == "WRONGTYPE") {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                        job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR value is not a valid float\r\n");
+                        job->sendReply( "-ERR value is not a valid float\r\n");
                     }
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
 
@@ -455,12 +515,12 @@ namespace MyRedis{
                     for (const auto& el : elements) {
                         response += "$" + std::to_string(el.length()) + "\r\n" + el + "\r\n";
                     }
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, response);
+                    job->sendReply( response);
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR value is not an integer or wrong type\r\n");
+                    job->sendReply( "-ERR value is not an integer or wrong type\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments\r\n");
+                job->sendReply( "-ERR wrong number of arguments\r\n");
             }
         });
     
@@ -470,12 +530,12 @@ namespace MyRedis{
             if (args.size() == 2) {
                 try {
                     size_t count = db->zcard(args[1]);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(count) + "\r\n");
+                    job->sendReply( ":" + std::to_string(count) + "\r\n");
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'zcard' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'zcard' command\r\n");
             }
         });
 
@@ -487,16 +547,16 @@ namespace MyRedis{
                     double min = std::stod(args[2]);
                     double max = std::stod(args[3]);
                     size_t count = db->zcount(args[1], min, max);
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(count) + "\r\n");
+                    job->sendReply( ":" + std::to_string(count) + "\r\n");
                 } catch (const std::invalid_argument& e) {
                     if (std::string(e.what()) == "WRONGTYPE") {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                        job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR min or max is not a float\r\n");
+                        job->sendReply( "-ERR min or max is not a float\r\n");
                     }
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'zcount' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'zcount' command\r\n");
             }
         });
 
@@ -507,15 +567,15 @@ namespace MyRedis{
                 try {
                     auto rank = db->zrank(args[1], args[2]);
                     if (rank.has_value()) {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, ":" + std::to_string(rank.value()) + "\r\n");
+                        job->sendReply( ":" + std::to_string(rank.value()) + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n"); // Member or key doesn't exist
+                        job->sendReply( "$-1\r\n"); // Member or key doesn't exist
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'zrank' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'zrank' command\r\n");
             }
         });
 
@@ -531,19 +591,16 @@ namespace MyRedis{
                         scoreStr.erase(scoreStr.find_last_not_of('0') + 1, std::string::npos);
                         if (scoreStr.back() == '.') scoreStr.pop_back();
 
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$" + std::to_string(scoreStr.length()) + "\r\n" + scoreStr + "\r\n");
+                        job->sendReply( "$" + std::to_string(scoreStr.length()) + "\r\n" + scoreStr + "\r\n");
                     } else {
-                        job->packetResponseManager->pushOrderedResponse(job->ticket, "$-1\r\n"); // Member or key doesn't exist
+                        job->sendReply( "$-1\r\n"); // Member or key doesn't exist
                     }
                 } catch (...) {
-                    job->packetResponseManager->pushOrderedResponse(job->ticket, "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
+                    job->sendReply( "-WRONGTYPE Operation against a key holding the wrong kind of value\r\n");
                 }
             } else {
-                job->packetResponseManager->pushOrderedResponse(job->ticket, "-ERR wrong number of arguments for 'zscore' command\r\n");
+                job->sendReply( "-ERR wrong number of arguments for 'zscore' command\r\n");
             }
         });
     }
-
-
-
 }

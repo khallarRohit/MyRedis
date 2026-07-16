@@ -7,6 +7,7 @@
 #include "Socket/socket.h"
 #include "Network/network.h"
 #include "TCPConnection/tcpconnection.h"
+#include "Aof/aofloader.h"
 #include "Error/WSAexception.h"
 
 namespace MyRedis {

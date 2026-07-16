@@ -8,7 +8,6 @@ namespace MyRedis {
     }
 
     RedisDatabase::~RedisDatabase() {
-        // Graceful Shutdown
         stopExpiryThread = true;
         if (expiryThread.joinable()) {
             expiryThread.join();
@@ -21,10 +20,22 @@ namespace MyRedis {
 
             if (keyspace.size() == 0) continue;
 
-            // To do Active Deletion properly with our ConcurrentHashMap, 
-            // we need to add a thread-safe random sampling method to the map itself 
-            // (e.g., keyspace.get_random_keys(20)).
-            // For now, memory is safely managed via Lazy Deletion in the get() methods.
+            do {
+                auto isExpiredPredicate = [](const std::string& k, const std::shared_ptr<RedisObject>& obj) {
+                    return obj->isExpired();
+                };
+
+                auto result = keyspace.sample_and_erase_if(20, isExpiredPredicate);
+
+                if (result.sampled == 0) break;
+                
+                double expiredRatio = static_cast<double>(result.expired) / result.sampled;
+                
+                if (expiredRatio <= 0.25) {
+                    break; 
+                }
+                
+            } while (!stopExpiryThread);
         }    
     }
 
@@ -33,25 +44,20 @@ namespace MyRedis {
         keyspace.insert_or_assign(key, std::make_shared<RedisString>(value));
     }
 
-    // Returns nullptr if the key doesn't exist, is expired, or is the wrong type
     std::shared_ptr<RedisString> RedisDatabase::get(const std::string& key) {
-        // 1. Safe concurrent lookup returning std::optional
         auto objOpt = keyspace.find(key);
         
         if (!objOpt.has_value()) {
             return nullptr;
         }
 
-        // 2. Extract the shared_ptr from the optional
         auto obj = objOpt.value();
 
-        // 3. Lazy Deletion Check
         if (obj->isExpired()) {
             keyspace.erase(key); 
             return nullptr;
         }
 
-        // 4. Safe dynamic cast
         return std::dynamic_pointer_cast<RedisString>(obj);
     }
 
@@ -67,26 +73,21 @@ namespace MyRedis {
                 auto strObj = std::dynamic_pointer_cast<RedisString>(obj);
                 if (!strObj) throw std::invalid_argument("WRONGTYPE");
                 
-                std::string oldVal = strObj->get(); // Save the old value
+                std::string oldVal = strObj->get(); 
                 
-                // LOCK-FREE OVERRIDE: Because RedisString uses atomic pointers, 
-                // we update the string in-place without altering the map structure.
                 strObj->set(value);
                 return oldVal;
             }
         }
 
-        // Slow Path: Key didn't exist or was expired, so we insert it
         keyspace.insert_or_assign(key, std::make_shared<RedisString>(value));
         return std::nullopt;
     }
 
     // --- SUBSTR ---
     std::string RedisDatabase::substr(const std::string& key, int start, int stop) {
-        // Reuse our safe get() logic which handles expiration and casting perfectly
         auto strObj = get(key); 
         
-        // Redis returns an empty string if the key doesn't exist or is expired
         if (!strObj) {
             return ""; 
         }
@@ -97,7 +98,6 @@ namespace MyRedis {
     // --- MSET ---
     void RedisDatabase::mset(const std::vector<std::pair<std::string, std::string>>& keyValues) {
         for (const auto& kv : keyValues) {
-            // Unconditionally overwrite using our thread-safe map method
             keyspace.insert_or_assign(kv.first, std::make_shared<RedisString>(kv.second));
         }
     }
@@ -110,8 +110,6 @@ namespace MyRedis {
         for (const auto& key : keys) {
             auto strObj = get(key); 
             
-            // get() returns nullptr if the key is missing, expired, or WRONGTYPE.
-            // This perfectly aligns with Redis's rule to return nil in all those cases without crashing.
             if (!strObj) {
                 results.push_back(std::nullopt); 
             } else {
@@ -131,7 +129,6 @@ namespace MyRedis {
             hashObj = std::dynamic_pointer_cast<RedisHash>(objOpt.value());
             if (!hashObj) throw std::invalid_argument("WRONGTYPE");
             
-            // Lazy Deletion
             if (hashObj->isExpired()) {
                 keyspace.erase(key);
                 hashObj = nullptr;
@@ -139,11 +136,8 @@ namespace MyRedis {
         }
 
         if (!hashObj) {
-            // Slow Path: Key didn't exist or was expired, create a new RedisHash!
             hashObj = std::make_shared<RedisHash>();
             
-            // CONCURRENCY WIN: We attempt to insert it. If Thread B beat us to it 
-            // a microsecond ago, 'inserted' will be false and we safely use theirs instead!
             auto [existing, inserted] = keyspace.insert(key, hashObj);
             
             if (!inserted && existing.has_value()) {
@@ -152,7 +146,6 @@ namespace MyRedis {
             }
         }
 
-        // Delegate the actual data insertion to the thread-safe RedisHash object
         hashObj->hset(field, value);
     }
 
@@ -173,7 +166,6 @@ namespace MyRedis {
         auto hashObj = std::dynamic_pointer_cast<RedisHash>(obj);
         if (!hashObj) throw std::invalid_argument("WRONGTYPE");
 
-        // Query your custom, thread-safe HashMap internally
         return hashObj->hget(field);
     }
 
@@ -182,7 +174,7 @@ namespace MyRedis {
         auto objOpt = keyspace.find(key);
         
         if (!objOpt.has_value()) {
-            return 0; // Key doesn't exist, 0 fields deleted
+            return 0; 
         }
 
         auto obj = objOpt.value();
@@ -281,7 +273,6 @@ namespace MyRedis {
             listObj = std::dynamic_pointer_cast<RedisList>(objOpt.value());
             if (!listObj) throw std::invalid_argument("WRONGTYPE");
             
-            // Lazy Deletion
             if (listObj->isExpired()) {
                 keyspace.erase(key);
                 listObj = nullptr;
@@ -289,20 +280,16 @@ namespace MyRedis {
         }
 
         if (!listObj) {
-            // Slow Path: Key didn't exist or was expired, create a new RedisList!
             listObj = std::make_shared<RedisList>();
             
-            // Thread-safe insert check
             auto [existing, inserted] = keyspace.insert(key, listObj);
             
             if (!inserted && existing.has_value()) {
-                // Another thread beat us to the creation, use theirs
                 listObj = std::dynamic_pointer_cast<RedisList>(existing.value());
                 if (!listObj) throw std::invalid_argument("WRONGTYPE");
             }
         }
 
-        // Delegate to the RedisList's internal lock mechanism
         return listObj->lpush(elements);
     }
 
@@ -351,20 +338,17 @@ namespace MyRedis {
         }
 
         if (!listObj) {
-            // Slow Path: Key didn't exist or was expired, create a new RedisList!
             listObj = std::make_shared<RedisList>();
             
             // Thread-safe insert check
             auto [existing, inserted] = keyspace.insert(key, listObj);
             
             if (!inserted && existing.has_value()) {
-                // Another thread beat us to the creation, use theirs
                 listObj = std::dynamic_pointer_cast<RedisList>(existing.value());
                 if (!listObj) throw std::invalid_argument("WRONGTYPE");
             }
         }
 
-        // Delegate to the RedisList's internal lock mechanism
         return listObj->rpush(elements);
     }
 
@@ -402,7 +386,7 @@ namespace MyRedis {
         auto objOpt = keyspace.find(key);
         
         if (!objOpt.has_value()) {
-            return {}; // Return empty array
+            return {};
         }
 
         auto obj = objOpt.value();
@@ -451,7 +435,7 @@ namespace MyRedis {
         auto objOpt = keyspace.find(key);
         
         if (!objOpt.has_value()) {
-            return std::nullopt; // Key doesn't exist (treat as 0 by the caller)
+            return std::nullopt; 
         }
 
         auto obj = objOpt.value();
@@ -470,7 +454,6 @@ namespace MyRedis {
     size_t RedisDatabase::scard(const std::string& key) {
         auto objOpt = keyspace.find(key);
         
-        // If the set doesn't exist, cardinality is 0
         if (!objOpt.has_value()) return 0;
 
         auto obj = objOpt.value();
@@ -489,7 +472,6 @@ namespace MyRedis {
     int RedisDatabase::srem(const std::string& key, const std::vector<std::string>& members) {
         auto objOpt = keyspace.find(key);
         
-        // If the set doesn't exist, 0 elements were removed
         if (!objOpt.has_value()) return 0;
 
         auto obj = objOpt.value();

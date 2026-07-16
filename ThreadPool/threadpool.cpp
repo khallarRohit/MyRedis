@@ -6,6 +6,10 @@ namespace MyRedis{
 
     ThreadPool::ThreadPool()
     :inQueue(InQueue::getInstance()){
+        noOfThreads = std::thread::hardware_concurrency();
+
+        if (noOfThreads <= 0) noOfThreads = 4;
+
         initiate();
     }
 
@@ -27,7 +31,7 @@ namespace MyRedis{
                 return; 
             }
 
-            Dispatcher::getInstance().dispatch(job);
+            Dispatcher::getInstance().dispatch(std::move(job));
         }
     }
 

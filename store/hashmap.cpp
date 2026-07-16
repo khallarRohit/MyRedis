@@ -1,4 +1,3 @@
-#include "hashmap.h" // Adjusted case to match standard
 #include <string>
 
 template<class K, class V>
@@ -103,7 +102,7 @@ void HashMap<K,V>::rehash(){
     }
 
     buckets = std::move(new_buckets);
-}   
+} 
 
 template<class K, class V>
 std::pair<std::optional<V>, bool> HashMap<K,V>::insert(const K& key, const V& value){
@@ -121,7 +120,6 @@ std::pair<std::optional<V>, bool> HashMap<K,V>::insert(const K& key, const V& va
             HashNode<K,V>* curr = bucket.head;
             while(curr != nullptr) {
                 if(curr->key == key) {
-                    // FOUND IT! Safely return a copy of V to let the caller handle the update.
                     return {curr->value, false}; 
                 }
                 curr = curr->next;
@@ -216,9 +214,10 @@ namespace MyRedis {
     struct AtomicValue;
 }
 
-template class HashMap<int, int>;
-template class HashMap<int, std::string>;
-template class HashMap<std::string, std::string>;
-template class HashMap<std::string, double>;
-template class HashMap<std::string, bool>;
-template class HashMap<std::string, std::shared_ptr<MyRedis::AtomicValue>>;
+// template class HashMap<int, int>;
+// template class HashMap<int, std::string>;
+// template class HashMap<std::string, std::string>;
+// template class HashMap<std::string, double>;
+// template class HashMap<std::string, bool>;
+// template class HashMap<std::string, std::shared_ptr<MyRedis::AtomicValue>>;
+// template class HashMap<std::string, std::shared_ptr<MyRedis::RedisHash::AtomicValue>>;

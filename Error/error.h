@@ -12,9 +12,9 @@ namespace MyRedis {
         UninitializedSocket,
         SocketNotBound,
         SocketBound,
+        ProtocolError,
     };
 
-    // 1. The Category Class
     class RedisErrorCategory : public std::error_category {
     public:
         const char* name() const noexcept override {
@@ -30,6 +30,7 @@ namespace MyRedis {
                 case Error::UninitializedSocket: return "Socket has not been initialized";
                 case Error::SocketNotBound:      return "Socket is not bound to a port";
                 case Error::SocketBound:         return "Socket is already bound";
+                case Error::ProtocolError:       return "RESP Protocol Violation";
                 default:                         return "Unknown Redis error";
             }
         }

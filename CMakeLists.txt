@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(MyRedis VERSION 0.1.0 LANGUAGES C CXX)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(COMMON_SOURCES 
     Ip/ipendpoint.cpp 
     Error/WSAexception.cpp
+    Error/Protocolexception.cpp
     Socket/socket.cpp
     Network/network.cpp
     TCPConnection/tcpconnection.cpp
@@ -13,7 +17,7 @@ set(COMMON_SOURCES
     PacketQueue/queue.cpp
     ThreadPool/threadpool.cpp
     store/database.cpp
-    store/hashmap.cpp
+    # store/hashmap.cpp
     store/map.cpp
     store/object.cpp
     store/redishash.cpp
@@ -22,6 +26,8 @@ set(COMMON_SOURCES
     store/redisstring.cpp
     store/rediszset.cpp
     Dispatcher/dispatcher.cpp
+    Aof/aofloader.cpp
+    Aof/aoflogger.cpp
 )
 
 add_library(RedisCommon STATIC ${COMMON_SOURCES})

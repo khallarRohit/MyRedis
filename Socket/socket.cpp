@@ -316,7 +316,18 @@ namespace MyRedis{
                 int selectRes = select(0, NULL, &writeFds, NULL, &timeout);     
                 
                 if (selectRes > 0) {
-                    return; 
+                    int optval;
+                    int optlen = sizeof(int);
+
+                    if (getsockopt(skt, SOL_SOCKET, SO_ERROR, (char*)&optval, &optlen) == 0) {
+                        if (optval == 0) {
+                            return; //  SUCCESS
+                        } else {
+
+                            // Connection failed (e.g Connection Refused)
+                            throw std::system_error(std::error_code(optval, std::system_category()));
+                        }
+                    }
                 } else if (selectRes == 0) {
                     throw std::system_error(std::error_code(WSAETIMEDOUT, std::system_category()), "Connection timed out");
                 } else {

@@ -39,7 +39,7 @@ private:
     void balanceDelete(Node<K,V>* node);
     void destroyTree(Node<K,V>* node);
     void copyTree(Node<K,V>*& thisNode, Node<K,V>* otherNode, Node<K,V>* parent, Node<K,V>* otherNull);
-    void inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result);
+    void inorder(Node<K,V>* node, Node<K,V>* nullNode, std::vector<K>& result) const;
 
 public:
     ~Map();

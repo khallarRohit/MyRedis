@@ -1,6 +1,7 @@
 #pragma once
 #include "Packet/packetmanager.h"
 #include "store/database.h"
+#include "AOF/aoflogger.h"
 #include <unordered_map>
 #include <functional>
 #include <string>
@@ -17,8 +18,12 @@ namespace MyRedis{
     class Dispatcher{
     private:
         Dispatcher() = default;
-        std::unordered_map<std::string, CommandHandler> registry;   
+
+        std::unordered_map<std::string, CommandHandler> registry;
+        std::shared_ptr<AofLogger> aofLogger;
+
         void registerCommand(std::string name, CommandHandler handler);
+        std::string reconstructRESP(const std::vector<std::string>& args);
 
     public:
         static Dispatcher& getInstance();
@@ -27,6 +32,8 @@ namespace MyRedis{
 
         Dispatcher(const Dispatcher& dispatcher) = delete;
         Dispatcher& operator=(const Dispatcher& dispatcher) = delete;
+
+        void setAofLogger(std::shared_ptr<AofLogger> logger);
 
         void dispatch(std::shared_ptr<ProcessJob> job);
 

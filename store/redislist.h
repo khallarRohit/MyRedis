@@ -28,14 +28,12 @@ namespace MyRedis{
         std::shared_ptr<ListBlock> head;
         std::shared_ptr<ListBlock> tail;
         
-        // Protects structural changes (adding/removing blocks)
         mutable std::shared_mutex listMutex; 
         
-        // Atomic counter for O(1) LLEN commands
         std::atomic<size_t> list_size{0};
 
     public:
-        RedisList() = default;
+        RedisList();
         ~RedisList() override = default;
 
         DataType getType() const override;

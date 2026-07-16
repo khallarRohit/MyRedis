@@ -22,13 +22,10 @@ namespace MyRedis {
 
     class RedisZSet : public RedisObject {
     private:
-        // O(1) lookups: Fully concurrent on its own
         HashMap<std::string, double> memberScores; 
         
-        // O(log N) sorting: Requires zsetMutex to safely balance
         Map<ZSetKey, bool> orderedTree;
 
-        // Protects the orderedTree and ensures it stays synced with memberScores
         mutable std::shared_mutex zsetMutex;
 
     public:

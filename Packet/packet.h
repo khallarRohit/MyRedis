@@ -1,10 +1,13 @@
 #pragma once
+#include "Error/Protocolexception.h"
 #include "packetexception.h"
 #include <vector>
 #include <queue>
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <charconv>
+#include <string_view>
 
 namespace MyRedis{
     enum BufferState{

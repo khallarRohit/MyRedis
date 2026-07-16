@@ -27,7 +27,6 @@ namespace MyRedis{
         RedisDatabase();
         ~RedisDatabase();
 
-        uint64_t getVersion(const std::string& key);
 
         // String
         void set(const std::string& key, const std::string& value);
