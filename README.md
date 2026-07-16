@@ -42,7 +42,8 @@ structures.
 > Given this O(N) network polling overhead and the lack of a kernel bypass or Windows IOCP, achieving >70% of native Linux Redis throughput on Windows is an expected and highly respectable baseline for this architecture.*
 >
 > 
-> # MyRedis vs Docker Redis - Comprehensive Benchmark
+
+# MyRedis vs Docker Redis - Comprehensive Benchmark
 **Date**: 2026-07-16 08:13:26
 **Base Requests**: 50000
 
